@@ -24,6 +24,9 @@ def main() -> None:
     register_handlers(app)
     setup_scheduler(app)
 
+    # create event loop for Application
+    loop = asyncio.new_event_loop()
+    asyncio.set_event_loop(loop)
     app.run_polling()
 
 

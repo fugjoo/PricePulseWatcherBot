@@ -17,4 +17,8 @@ async def check_prices(app: Application) -> None:
 
 def setup_scheduler(app: Application) -> None:
     scheduler.add_job(check_prices, "interval", minutes=1, args=(app,))
-    scheduler.start()
+
+    async def start(_: Application) -> None:
+        scheduler.start()
+
+    app.post_init = start
