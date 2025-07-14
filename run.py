@@ -2,6 +2,7 @@ import asyncio
 import json
 import logging
 import os
+import random
 import re
 import signal
 import time
@@ -99,6 +100,7 @@ COIN_SYMBOLS: Dict[str, str] = {
     "dogecoin": "DOGE",
 }
 SYMBOL_TO_COIN: Dict[str, str] = {v.lower(): k for k, v in COIN_SYMBOLS.items()}
+TOP_COINS: list[str] = []
 
 
 def symbol_for(coin: str) -> str:
@@ -136,6 +138,40 @@ async def fetch_trending_coins() -> None:
                     COINS = coins
     except aiohttp.ClientError as exc:
         logger.error("error fetching trending coins: %s", exc)
+
+
+async def fetch_top_coins() -> None:
+    """Populate TOP_COINS with the 20 best performing coins (24h change)."""
+    url = (
+        "https://api.coingecko.com/api/v3/coins/markets"
+        "?vs_currency=usd&order=market_cap_desc&per_page=50&page=1"
+        "&price_change_percentage=24h"
+    )
+    try:
+        async with aiohttp.ClientSession() as session:
+            async with session.get(url) as resp:
+                if resp.status != 200:
+                    logger.warning("top coins request failed: %s", resp.status)
+                    return
+                data = await resp.json()
+                sorted_data = sorted(
+                    data,
+                    key=lambda d: d.get("price_change_percentage_24h", 0),
+                    reverse=True,
+                )
+                coins: list[str] = []
+                for item in sorted_data[:20]:
+                    coin_id = item.get("id")
+                    symbol = item.get("symbol")
+                    if coin_id:
+                        coins.append(coin_id)
+                        if symbol:
+                            COIN_SYMBOLS[coin_id] = symbol.upper()
+                            SYMBOL_TO_COIN[symbol.lower()] = coin_id
+                global TOP_COINS
+                TOP_COINS = coins
+    except aiohttp.ClientError as exc:
+        logger.error("error fetching top coins: %s", exc)
 
 
 logging.basicConfig(level=os.getenv("LOG_LEVEL", "INFO").upper())
@@ -561,7 +597,8 @@ ERROR_EMOJI = "\u26a0\ufe0f"
 
 
 def get_keyboard() -> ReplyKeyboardMarkup:
-    coins = COINS[:3] if COINS else ["bitcoin"]
+    coins_source = TOP_COINS or COINS or ["bitcoin"]
+    coins = random.sample(coins_source, k=min(3, len(coins_source)))
     subs = [KeyboardButton(f"{SUB_EMOJI} Subscribe {symbol_for(c)}") for c in coins]
     keyboard = [
         subs,
@@ -915,6 +952,7 @@ async def main() -> None:
     load_config()
     await init_db()
     await fetch_trending_coins()
+    await fetch_top_coins()
 
     token = os.getenv("TELEGRAM_TOKEN")
     if not token:
@@ -938,6 +976,7 @@ async def main() -> None:
         check_prices, "interval", seconds=PRICE_CHECK_INTERVAL, args=(app,)
     )
     scheduler.add_job(fetch_trending_coins, "interval", minutes=10)
+    scheduler.add_job(fetch_top_coins, "interval", minutes=10)
     scheduler.start()
 
     await app.initialize()
