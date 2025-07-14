@@ -545,7 +545,7 @@ async def check_prices(app) -> None:
 
 
 SUB_EMOJI = "\U0001F514"
-RELOAD_EMOJI = "\U00027F3"
+RELOAD_EMOJI = "\U000027F3"
 LIST_EMOJI = "\U0001f4cb"
 HELP_EMOJI = "\u2753"
 WELCOME_EMOJI = "\U0001f44b"
