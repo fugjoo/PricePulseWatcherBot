@@ -37,6 +37,14 @@ to coin alerts with:
 List active subscriptions with `/list` and remove them using
 `/unsubscribe <coin>`.
 
+Additional commands provide more market data:
+
+```bash
+/info <coin>       # show coin details
+/chart <coin> [d]  # display a price chart
+/global            # global market overview
+```
+
 ### One-click install
 
 Simply run the provided script to set up everything at once. If Python 3.8+

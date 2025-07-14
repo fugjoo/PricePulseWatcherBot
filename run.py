@@ -4,13 +4,16 @@ import os
 import signal
 import time
 from collections import defaultdict, deque
+from io import BytesIO
 from itertools import cycle
 from typing import Deque, Dict, Optional, Tuple
 
 import aiohttp
 import aiosqlite
+import matplotlib
 from apscheduler.schedulers.asyncio import AsyncIOScheduler
 from dotenv import load_dotenv
+from matplotlib import pyplot as plt
 from telegram import Bot, KeyboardButton, ReplyKeyboardMarkup, Update
 from telegram.ext import (
     ApplicationBuilder,
@@ -20,11 +23,58 @@ from telegram.ext import (
     filters,
 )
 
+matplotlib.use("Agg")
+
 DB_FILE = "subs.db"
 DEFAULT_THRESHOLD = 3.0
 
 COINS = ["bitcoin", "ethereum", "litecoin", "dogecoin"]
+COIN_SYMBOLS: Dict[str, str] = {}
 coin_cycle = cycle(COINS)
+
+
+def resolve_coin(coin: str) -> str:
+    """Return the API id for a coin symbol or id."""
+    return COIN_SYMBOLS.get(coin.lower(), coin.lower())
+
+
+async def fetch_coin_list() -> None:
+    """Populate symbol to ID mapping from CoinGecko."""
+    url = "https://api.coingecko.com/api/v3/coins/list"
+    async with aiohttp.ClientSession() as session:
+        async with session.get(url) as resp:
+            if resp.status != 200:
+                return
+            data = await resp.json()
+            for coin in data:
+                symbol = coin.get("symbol", "").lower()
+                cid = coin.get("id")
+                if symbol and cid and symbol not in COIN_SYMBOLS:
+                    COIN_SYMBOLS[symbol] = cid
+
+
+async def fetch_trending_coins() -> None:
+    """Update COINS with trending data from CoinGecko."""
+    url = "https://api.coingecko.com/api/v3/search/trending"
+    async with aiohttp.ClientSession() as session:
+        async with session.get(url) as resp:
+            if resp.status != 200:
+                return
+            data = await resp.json()
+            coins = []
+            for item in data.get("coins", [])[:10]:
+                info = item.get("item", {})
+                cid = info.get("id")
+                symbol = info.get("symbol", "").lower()
+                if cid:
+                    coins.append(cid)
+                if symbol and cid:
+                    COIN_SYMBOLS.setdefault(symbol, cid)
+            if coins:
+                global COINS, coin_cycle
+                COINS = coins
+                coin_cycle = cycle(COINS)
+
 
 logging.basicConfig(level=os.getenv("LOG_LEVEL", "INFO").upper())
 logger = logging.getLogger(__name__)
@@ -66,6 +116,7 @@ async def get_price(
     coin: str, session: Optional[aiohttp.ClientSession] = None
 ) -> Optional[float]:
     """Return the current USD price for a coin from CoinGecko."""
+    coin = resolve_coin(coin)
     now = time.time()
     cached = PRICE_CACHE.get(coin)
     if cached and now - cached[1] < 60:
@@ -96,6 +147,86 @@ async def get_price(
             await asyncio.sleep(2**attempt)
     finally:
         if owns_session:
+            await session.close()
+    return None
+
+
+async def get_coin_info(
+    coin: str, session: Optional[aiohttp.ClientSession] = None
+) -> Optional[dict]:
+    """Return detailed coin info from CoinGecko."""
+    coin = resolve_coin(coin)
+    url = f"https://api.coingecko.com/api/v3/coins/{coin}"
+    owns_session = session is None
+    if owns_session:
+        session = aiohttp.ClientSession()
+    try:
+        async with REQUEST_LOCK:
+            global LAST_REQUEST
+            wait = max(0, LAST_REQUEST + 1.2 - time.time())
+            if wait:
+                await asyncio.sleep(wait)
+            resp = await session.get(url)
+            LAST_REQUEST = time.time()
+        if resp.status == 200:
+            return await resp.json()
+    finally:
+        if owns_session and session:
+            await session.close()
+    return None
+
+
+async def get_market_chart(
+    coin: str, days: int, session: Optional[aiohttp.ClientSession] = None
+) -> Optional[list[tuple[float, float]]]:
+    """Return historical price chart data for a coin."""
+    coin = resolve_coin(coin)
+    end_ts = int(time.time())
+    start_ts = end_ts - days * 86400
+    url = (
+        f"https://api.coingecko.com/api/v3/coins/{coin}/market_chart/range"
+        f"?vs_currency=usd&from={start_ts}&to={end_ts}"
+    )
+    owns_session = session is None
+    if owns_session:
+        session = aiohttp.ClientSession()
+    try:
+        async with REQUEST_LOCK:
+            global LAST_REQUEST
+            wait = max(0, LAST_REQUEST + 1.2 - time.time())
+            if wait:
+                await asyncio.sleep(wait)
+            resp = await session.get(url)
+            LAST_REQUEST = time.time()
+        if resp.status == 200:
+            data = await resp.json()
+            return [(p[0] / 1000, p[1]) for p in data.get("prices", [])]
+    finally:
+        if owns_session and session:
+            await session.close()
+    return None
+
+
+async def get_global_overview(
+    session: Optional[aiohttp.ClientSession] = None,
+) -> Optional[dict]:
+    """Return global market data from CoinGecko."""
+    url = "https://api.coingecko.com/api/v3/global"
+    owns_session = session is None
+    if owns_session:
+        session = aiohttp.ClientSession()
+    try:
+        async with REQUEST_LOCK:
+            global LAST_REQUEST
+            wait = max(0, LAST_REQUEST + 1.2 - time.time())
+            if wait:
+                await asyncio.sleep(wait)
+            resp = await session.get(url)
+            LAST_REQUEST = time.time()
+        if resp.status == 200:
+            return await resp.json()
+    finally:
+        if owns_session and session:
             await session.close()
     return None
 
@@ -203,6 +334,7 @@ def get_keyboard() -> ReplyKeyboardMarkup:
     keyboard = [
         [KeyboardButton(f"{SUB_EMOJI} Subscribe {coin.upper()}")],
         [KeyboardButton(f"{LIST_EMOJI} List"), KeyboardButton(f"{HELP_EMOJI} Help")],
+        [KeyboardButton("/info"), KeyboardButton("/chart"), KeyboardButton("/global")],
     ]
     return ReplyKeyboardMarkup(
         keyboard,
@@ -222,7 +354,10 @@ async def help_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     await update.message.reply_text(
         "/subscribe <coin> [pct] - subscribe to price alerts\n"
         "/unsubscribe <coin> - remove subscription\n"
-        "/list - list subscriptions",
+        "/list - list subscriptions\n"
+        "/info <coin> - coin information\n"
+        "/chart <coin> [days] - price chart\n"
+        "/global - market overview",
         reply_markup=get_keyboard(),
     )
 
@@ -231,7 +366,7 @@ async def subscribe_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE) -> N
     if not context.args:
         await update.message.reply_text("Usage: /subscribe <coin> [pct]", quote=True)
         return
-    coin = context.args[0].lower()
+    coin = resolve_coin(context.args[0])
     try:
         threshold = (
             float(context.args[1]) if len(context.args) > 1 else DEFAULT_THRESHOLD
@@ -257,7 +392,7 @@ async def unsubscribe_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
     if not context.args:
         await update.message.reply_text("Usage: /unsubscribe <coin>")
         return
-    coin = context.args[0].lower()
+    coin = resolve_coin(context.args[0])
     await unsubscribe_coin(update.effective_chat.id, coin)
 
     logger.info(
@@ -271,7 +406,6 @@ async def unsubscribe_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
     )
 
 
-
 async def list_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     subs = await list_subscriptions(update.effective_chat.id)
     if not subs:
@@ -279,6 +413,76 @@ async def list_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     else:
         text = "\n".join(f"{c.upper()} ±{t}%" for c, t in subs)
 
+    await update.message.reply_text(text)
+
+
+async def info_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    if not context.args:
+        await update.message.reply_text("Usage: /info <coin>")
+        return
+    coin = resolve_coin(context.args[0])
+    data = await get_coin_info(coin)
+    if not data:
+        await update.message.reply_text("Coin not found")
+        return
+    market = data.get("market_data", {})
+    price = market.get("current_price", {}).get("usd")
+    cap = market.get("market_cap", {}).get("usd")
+    change = market.get("price_change_percentage_24h")
+    text = f"{data.get('name')} ({data.get('symbol', '').upper()})\n"
+    if price is not None:
+        text += f"Price: ${price:.2f}\n"
+    if cap is not None:
+        text += f"Market Cap: ${cap:,.0f}\n"
+    if change is not None:
+        text += f"24h Change: {change:.2f}%"
+    await update.message.reply_text(text)
+
+
+async def chart_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    if not context.args:
+        await update.message.reply_text("Usage: /chart <coin> [days]")
+        return
+    coin = resolve_coin(context.args[0])
+    days = 7
+    if len(context.args) > 1:
+        try:
+            days = int(context.args[1])
+        except ValueError:
+            await update.message.reply_text("Days must be a number")
+            return
+    data = await get_market_chart(coin, days)
+    if not data:
+        await update.message.reply_text("No data available")
+        return
+    times, prices = zip(*data)
+    plt.figure(figsize=(6, 3))
+    plt.plot(times, prices)
+    plt.title(f"{coin.upper()} last {days} days")
+    plt.tight_layout()
+    buf = BytesIO()
+    plt.savefig(buf, format="png")
+    plt.close()
+    buf.seek(0)
+    await context.bot.send_photo(update.effective_chat.id, buf)
+
+
+async def global_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    data = await get_global_overview()
+    if not data:
+        await update.message.reply_text("Failed to fetch data")
+        return
+    info = data.get("data", {})
+    cap = info.get("total_market_cap", {}).get("usd")
+    volume = info.get("total_volume", {}).get("usd")
+    btc_dom = info.get("market_cap_percentage", {}).get("btc")
+    text = ""
+    if cap is not None:
+        text += f"Market Cap: ${cap:,.0f}\n"
+    if volume is not None:
+        text += f"24h Volume: ${volume:,.0f}\n"
+    if btc_dom is not None:
+        text += f"BTC Dominance: {btc_dom:.2f}%"
     await update.message.reply_text(text)
 
 
@@ -296,8 +500,11 @@ async def button(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
         await query.edit_message_reply_markup(reply_markup=get_keyboard())
     elif query.data == "list":
         subs = await list_subscriptions(query.message.chat_id)
-
-    await update.message.reply_text(text, reply_markup=get_keyboard())
+        if not subs:
+            text = "No active subscriptions"
+        else:
+            text = "\n".join(f"{c.upper()} ±{t}%" for c, t in subs)
+        await context.bot.send_message(chat_id=query.message.chat_id, text=text)
 
 
 async def menu(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
@@ -335,6 +542,8 @@ async def main() -> None:
     """Start the bot."""
     load_dotenv()
     await init_db()
+    await fetch_coin_list()
+    await fetch_trending_coins()
 
     token = os.getenv("TELEGRAM_TOKEN")
     if not token:
@@ -347,6 +556,9 @@ async def main() -> None:
     app.add_handler(CommandHandler("subscribe", subscribe_cmd))
     app.add_handler(CommandHandler("unsubscribe", unsubscribe_cmd))
     app.add_handler(CommandHandler("list", list_cmd))
+    app.add_handler(CommandHandler("info", info_cmd))
+    app.add_handler(CommandHandler("chart", chart_cmd))
+    app.add_handler(CommandHandler("global", global_cmd))
     app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, menu))
 
     scheduler = AsyncIOScheduler()
