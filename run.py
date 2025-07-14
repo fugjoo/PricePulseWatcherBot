@@ -38,9 +38,17 @@ from telegram.ext import (
 matplotlib.use("Agg")
 
 DB_FILE = "subs.db"
+BOT_NAME = "PricePulseWatcherBot"
 DEFAULT_THRESHOLD = 0.1
 DEFAULT_INTERVAL = 60
 PRICE_CHECK_INTERVAL = 60
+
+# emojis used for price movements
+UP_ARROW = "\U0001f53a"  # red up triangle
+DOWN_ARROW = "\U0001f53b"  # blue down triangle
+ROCKET = "\U0001f680"  # rocket for big gains
+BOMB = "\U0001f4a3"  # bomb for big drops
+DEFAULT_ALERT_EMOJI = ROCKET
 
 
 def parse_duration(value: str) -> int:
@@ -139,6 +147,9 @@ PRICE_CACHE: Dict[str, Tuple[float, float]] = {}
 REQUEST_LOCK = asyncio.Lock()
 LAST_REQUEST = 0.0
 
+# cache last observed price to avoid zero when API fails
+LAST_KNOWN_PRICE: Dict[str, float] = {}
+
 # telegram rate limits
 user_messages: Dict[int, Deque[float]] = defaultdict(deque)
 global_messages: Deque[float] = deque()
@@ -182,6 +193,15 @@ def milestones_crossed(last: float, current: float) -> list[float]:
             levels.append(boundary)
             boundary -= step
     return levels
+
+
+def trend_emojis(change: float) -> str:
+    """Return arrow and rocket/bomb emojis for a price change."""
+    if change >= 10:
+        return f"{UP_ARROW} {ROCKET}"
+    if change <= -10:
+        return f"{DOWN_ARROW} {BOMB}"
+    return UP_ARROW if change >= 0 else DOWN_ARROW
 
 
 async def init_db() -> None:
@@ -250,12 +270,14 @@ async def get_price(
                 if coin in data:
                     price = float(data[coin]["usd"])
                     PRICE_CACHE[coin] = (price, time.time())
+                    LAST_KNOWN_PRICE[coin] = price
                     return price
             await asyncio.sleep(2**attempt)
     finally:
         if owns_session:
             await session.close()
-    return None
+    # use last known price if available to avoid showing 0
+    return LAST_KNOWN_PRICE.get(coin)
 
 
 async def get_coin_info(
@@ -430,12 +452,10 @@ async def set_last_price(sub_id: int, price: float) -> None:
         await db.commit()
 
 
-DEFAULT_ALERT_EMOJI = "\U0001f680"
-
-
 async def send_rate_limited(
     bot: Bot, chat_id: int, text: str, emoji: str = DEFAULT_ALERT_EMOJI
 ) -> None:
+    """Send a message respecting basic rate limits."""
     now = time.time()
     # cleanup timestamps
     user_q = user_messages[chat_id]
@@ -452,7 +472,7 @@ async def send_rate_limited(
         wait = 1 - (now - global_messages[0])
         await asyncio.sleep(wait)
 
-    await bot.send_message(chat_id=chat_id, text=f"{emoji} {text}")
+    await bot.send_message(chat_id=chat_id, text=f"{text} {emoji}")
     user_q.append(time.time())
     global_messages.append(time.time())
 
@@ -489,11 +509,17 @@ async def check_prices(app) -> None:
             for level in milestones_crossed(prev, price):
                 symbol = symbol_for(coin)
                 if price > prev:
-                    msg = f"{symbol} breaks through ${level:.0f} " f"(now ${price})"
-                    await send_rate_limited(app.bot, chat_id, msg, emoji=UP_EMOJI)
+
+                    msg = f"{symbol} blasts past ${level:.0f} " f"(now ${price})"
+                    await send_rate_limited(
+                        app.bot, chat_id, msg, emoji=f"{UP_ARROW} {ROCKET}"
+                    )
                 else:
-                    msg = f"{symbol} falls below ${level:.0f} " f"(now ${price})"
-                    await send_rate_limited(app.bot, chat_id, msg, emoji=DOWN_EMOJI)
+                    msg = f"{symbol} dives below ${level:.0f} " f"(now ${price})"
+                    await send_rate_limited(
+                        app.bot, chat_id, msg, emoji=f"{DOWN_ARROW} {BOMB}"
+                    )
+
 
             MILESTONE_CACHE[(chat_id, coin)] = price
 
@@ -503,9 +529,10 @@ async def check_prices(app) -> None:
                 if change >= threshold:
 
                     symbol = symbol_for(coin)
-                    emoji = UP_EMOJI if raw_change >= 0 else DOWN_EMOJI
                     text = f"{symbol} moved {raw_change:+.2f}% to ${price}"
-                    await send_rate_limited(app.bot, chat_id, text, emoji=emoji)
+                    await send_rate_limited(
+                        app.bot, chat_id, text, emoji=trend_emojis(raw_change)
+                    )
 
                 await set_last_price(sub_id, price)
 
@@ -518,10 +545,6 @@ WELCOME_EMOJI = "\U0001f44b"
 INFO_EMOJI = "\u2139\ufe0f"
 SUCCESS_EMOJI = "\u2705"
 ERROR_EMOJI = "\u26a0\ufe0f"
-ALERT_EMOJI = "\U0001f680"  # rocket
-UP_EMOJI = "\U0001f680"  # rocket for rising prices
-DOWN_EMOJI = "\U0001f4a3"  # bomb for falling prices
-COIN_EMOJI = ""  # coin symbol removed
 
 
 def get_keyboard() -> ReplyKeyboardMarkup:
@@ -542,14 +565,16 @@ def get_keyboard() -> ReplyKeyboardMarkup:
 
 
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    """Handle /start command and show main menu."""
     logger.debug("/start from %s", update.effective_chat.id)
     await update.message.reply_text(
-        f"{WELCOME_EMOJI} Welcome! Choose an action:",
+        f"{WELCOME_EMOJI} Welcome to {BOT_NAME}! Choose an action:",
         reply_markup=get_keyboard(),
     )
 
 
 async def help_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    """Display usage information."""
     await update.message.reply_text(
         f"{INFO_EMOJI} /subscribe <coin> [pct] [interval] - subscribe to price alerts\n"
         "/unsubscribe <coin> - remove subscription\n"
@@ -563,6 +588,7 @@ async def help_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
 
 
 async def subscribe_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    """Subscribe the chat to a coin at a given threshold and interval."""
     if not context.args:
         await update.message.reply_text(
             f"{ERROR_EMOJI} Usage: /subscribe <coin> [pct] [interval]",
@@ -607,6 +633,7 @@ async def subscribe_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE) -> N
 
 
 async def unsubscribe_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    """Remove an existing subscription."""
     if not context.args:
         await update.message.reply_text(f"{ERROR_EMOJI} Usage: /unsubscribe <coin>")
         return
@@ -627,6 +654,7 @@ async def unsubscribe_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
 
 
 async def list_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    """List all active subscriptions for the chat."""
     subs = await list_subscriptions(update.effective_chat.id)
     if not subs:
         await update.message.reply_text(f"{INFO_EMOJI} No active subscriptions")
@@ -653,6 +681,7 @@ async def list_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
 
 
 async def info_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    """Show basic information about a coin."""
     if not context.args:
         await update.message.reply_text(f"{ERROR_EMOJI} Usage: /info <coin>")
         return
@@ -679,6 +708,7 @@ async def info_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
 
 
 async def chart_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    """Send a price history chart as an image."""
     if not context.args:
         await update.message.reply_text(f"{ERROR_EMOJI} Usage: /chart <coin> [days]")
         return
@@ -707,6 +737,7 @@ async def chart_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
 
 
 async def global_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    """Display global market statistics."""
     data = await get_global_overview()
     if not data:
         await update.message.reply_text(f"{ERROR_EMOJI} Failed to fetch data")
@@ -726,6 +757,7 @@ async def global_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None
 
 
 async def button(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    """Handle inline keyboard button callbacks."""
     query = update.callback_query
     await query.answer()
     if query.data.startswith("sub:"):
@@ -793,6 +825,7 @@ async def button(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
 
 
 async def menu(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    """Handle replies from the custom keyboard."""
     if not update.message:
         return
     text = update.message.text.strip()
@@ -904,7 +937,7 @@ async def main() -> None:
     )
     await app.start()
     await app.updater.start_polling()
-    logger.info("Bot started")
+    logger.info(f"{BOT_NAME} started")
 
     stop_event = asyncio.Event()
     for sig in (signal.SIGINT, signal.SIGTERM):
@@ -915,7 +948,7 @@ async def main() -> None:
     await app.stop()
     await app.shutdown()
     scheduler.shutdown()
-    logger.info("Bot stopped")
+    logger.info(f"{BOT_NAME} stopped")
 
 
 if __name__ == "__main__":

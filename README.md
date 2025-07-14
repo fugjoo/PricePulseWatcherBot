@@ -1,8 +1,8 @@
-# CoinNotifyBot
+# PricePulseWatcherBot
 
 Telegram bot that notifies you when a cryptocurrency moves by a chosen
 percentage. Create a `.env` from the example and keep your
-`TELEGRAM_TOKEN` secret. Talk to **@CoinNotifyBot** to get started.
+`TELEGRAM_TOKEN` secret. Talk to **@PricePulseWatcherBot** to get started.
 
 ## Features
 
@@ -43,13 +43,6 @@ Run the provided script to set up a virtual environment automatically:
 
 ```bash
 ./install.sh
-```
-
-### Docker
-
-```bash
-docker build -t crypto-bot .
-docker run --env-file .env crypto-bot
 ```
 
 ## License
