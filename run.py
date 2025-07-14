@@ -9,7 +9,7 @@ from bot.scheduler import setup_scheduler
 from bot.db import init_db
 
 
-def main() -> None:
+async def main() -> None:
     """Start the Telegram bot."""
 
     load_env()
@@ -17,15 +17,15 @@ def main() -> None:
     if not token:
         raise RuntimeError("BOT_TOKEN not set")
 
-    # initialize database in its own event loop
-    asyncio.run(init_db())
+    # initialize database
+    await init_db()
 
     app = ApplicationBuilder().token(token).build()
     register_handlers(app)
     setup_scheduler(app)
 
-    app.run_polling()
+    await app.run_polling()
 
 
 if __name__ == "__main__":
-    main()
+    asyncio.run(main())
