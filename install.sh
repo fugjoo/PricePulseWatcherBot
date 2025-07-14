@@ -3,7 +3,7 @@
 # This script sets up a Python virtual environment, installs dependencies,
 # and prepares the .env configuration file.
 
-set -e
+set -euo pipefail
 
 # Determine project root (directory of this script)
 ROOT_DIR="$(cd "$(dirname "$0")" && pwd)"
@@ -12,8 +12,29 @@ cd "$ROOT_DIR"
 # Check for Python 3.8+
 PYTHON=${PYTHON:-python3}
 if ! command -v "$PYTHON" >/dev/null 2>&1; then
+
+    if command -v apt-get >/dev/null 2>&1; then
+        echo "Python 3.8+ not found. Installing python3.8..."
+        sudo apt-get update
+        sudo apt-get install -y python3.8 python3.8-venv
+        PYTHON=python3.8
+    elif command -v yum >/dev/null 2>&1; then
+        echo "Python 3.8+ not found. Installing python3 via yum..."
+        sudo yum install -y python3
+        PYTHON=python3
+    elif command -v dnf >/dev/null 2>&1; then
+        echo "Python 3.8+ not found. Installing python3 via dnf..."
+        sudo dnf install -y python3
+        PYTHON=python3
+    else
+        echo "Python 3.8+ is required but automatic installation failed." >&2
+        echo "Please install Python 3.8 or newer and re-run this script." >&2
+        exit 1
+    fi
+
     echo "Python 3.8+ is required but not found. Please install Python 3.8 or newer." >&2
     exit 1
+
 fi
 
 # Verify that the Python version meets the minimum requirement
