@@ -6,3 +6,4 @@ APScheduler
 pytest
 pytest-asyncio
 aresponses
+matplotlib
