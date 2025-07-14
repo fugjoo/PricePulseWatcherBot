@@ -743,6 +743,23 @@ async def build_sub_entries(chat_id: int) -> list[tuple[str, str]]:
     return entries
 
 
+async def build_list_keyboard(chat_id: int) -> Optional[InlineKeyboardMarkup]:
+    """Return inline buttons to remove each subscription."""
+    subs = await list_subscriptions(chat_id)
+    if not subs:
+        return None
+    buttons = [
+        [
+            InlineKeyboardButton(
+                f"Remove {symbol_for(coin)}",
+                callback_data=f"del:{coin}",
+            )
+        ]
+        for _, coin, *_ in subs
+    ]
+    return InlineKeyboardMarkup(buttons)
+
+
 async def list_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     """List all active subscriptions for the chat."""
     entries = await build_sub_entries(update.effective_chat.id)
