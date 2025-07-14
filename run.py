@@ -8,7 +8,7 @@ import time
 from collections import defaultdict, deque
 from decimal import Decimal
 from io import BytesIO
-from typing import Deque, Dict, Optional, Tuple
+from typing import Awaitable, Callable, Deque, Dict, Optional, Tuple
 
 import aiohttp
 import aiosqlite
@@ -466,6 +466,36 @@ async def set_last_price(sub_id: int, price: float) -> None:
         await db.commit()
 
 
+async def format_and_send_subscription_list(
+    chat_id: int,
+    sender: Callable[[str, Optional[InlineKeyboardMarkup]], Awaitable[None]],
+) -> None:
+    """Send formatted subscription info using the provided sender."""
+    subs = await list_subscriptions(chat_id)
+    if not subs:
+        await sender(f"{INFO_EMOJI} No active subscriptions", None)
+        return
+
+    for _, coin, threshold, interval, last_price, _ in subs:
+        price = await get_price(coin) or 0
+        change = 0.0
+        if last_price:
+            change = (price - last_price) / last_price * 100
+        text = (
+            f"{symbol_for(coin)} ${format_price(price)} {change:+.2f}% "
+            f"/ ±{threshold}% every {interval}s"
+        )
+        keyboard = InlineKeyboardMarkup(
+            [
+                [
+                    InlineKeyboardButton("Unsubscribe", callback_data=f"del:{coin}"),
+                    InlineKeyboardButton("Edit", callback_data=f"edit:{coin}"),
+                ]
+            ]
+        )
+        await sender(text, keyboard)
+
+
 async def send_rate_limited(
     bot: Bot, chat_id: int, text: str, emoji: str = DEFAULT_ALERT_EMOJI
 ) -> None:
@@ -666,29 +696,11 @@ async def unsubscribe_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
 
 async def list_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     """List all active subscriptions for the chat."""
-    subs = await list_subscriptions(update.effective_chat.id)
-    if not subs:
-        await update.message.reply_text(f"{INFO_EMOJI} No active subscriptions")
-        return
 
-    for _, coin, threshold, interval, last_price, last_ts in subs:
-        price = await get_price(coin) or 0
-        change = 0.0
-        if last_price:
-            change = (price - last_price) / last_price * 100
-        text = (
-            f"{symbol_for(coin)} ${format_price(price)} {change:+.2f}% "
-            f"/ ±{threshold}% every {interval}s"
-        )
-        keyboard = InlineKeyboardMarkup(
-            [
-                [
-                    InlineKeyboardButton("Unsubscribe", callback_data=f"del:{coin}"),
-                    InlineKeyboardButton("Edit", callback_data=f"edit:{coin}"),
-                ]
-            ]
-        )
-        await update.message.reply_text(text, reply_markup=keyboard)
+    async def sender(text: str, markup: Optional[InlineKeyboardMarkup]) -> None:
+        await update.message.reply_text(text, reply_markup=markup)
+
+    await format_and_send_subscription_list(update.effective_chat.id, sender)
 
 
 async def info_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
@@ -811,36 +823,13 @@ async def button(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
         )
         await query.edit_message_reply_markup(reply_markup=None)
     elif query.data == "list":
-        subs = await list_subscriptions(query.message.chat_id)
-        if not subs:
 
-            text = f"{INFO_EMOJI} No active subscriptions"
+        async def sender(text: str, markup: Optional[InlineKeyboardMarkup]) -> None:
+            await context.bot.send_message(
+                chat_id=query.message.chat_id, text=text, reply_markup=markup
+            )
 
-        else:
-            for _, coin, threshold, interval, last_price, last_ts in subs:
-                price = await get_price(coin) or 0
-                change = 0.0
-                if last_price:
-                    change = (price - last_price) / last_price * 100
-                text = (
-                    f"{symbol_for(coin)} ${format_price(price)} {change:+.2f}% "
-                    f"/ ±{threshold}% every {interval}s"
-                )
-                keyboard = InlineKeyboardMarkup(
-                    [
-                        [
-                            InlineKeyboardButton(
-                                "Unsubscribe", callback_data=f"del:{coin}"
-                            ),
-                            InlineKeyboardButton("Edit", callback_data=f"edit:{coin}"),
-                        ]
-                    ]
-                )
-                await context.bot.send_message(
-                    chat_id=query.message.chat_id,
-                    text=text,
-                    reply_markup=keyboard,
-                )
+        await format_and_send_subscription_list(query.message.chat_id, sender)
         await query.edit_message_reply_markup(reply_markup=get_keyboard())
 
 
@@ -870,33 +859,11 @@ async def menu(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     elif text == RELOAD_EMOJI:
         await update.message.reply_text("New suggestion:", reply_markup=get_keyboard())
     elif text == f"{LIST_EMOJI} List":
-        subs = await list_subscriptions(update.effective_chat.id)
 
-        if not subs:
+        async def sender(text: str, markup: Optional[InlineKeyboardMarkup]) -> None:
+            await update.message.reply_text(text, reply_markup=markup)
 
-            msg = f"{INFO_EMOJI} No active subscriptions"
-
-        else:
-            for _, coin, threshold, interval, last_price, last_ts in subs:
-                price = await get_price(coin) or 0
-                change = 0.0
-                if last_price:
-                    change = (price - last_price) / last_price * 100
-                msg = (
-                    f"{symbol_for(coin)} ${format_price(price)} {change:+.2f}% "
-                    f"/ ±{threshold}% every {interval}s"
-                )
-                keyboard = InlineKeyboardMarkup(
-                    [
-                        [
-                            InlineKeyboardButton(
-                                "Unsubscribe", callback_data=f"del:{coin}"
-                            ),
-                            InlineKeyboardButton("Edit", callback_data=f"edit:{coin}"),
-                        ]
-                    ]
-                )
-                await update.message.reply_text(msg, reply_markup=keyboard)
+        await format_and_send_subscription_list(update.effective_chat.id, sender)
     elif text == f"{HELP_EMOJI} Help":
         await update.message.reply_text(
             (
