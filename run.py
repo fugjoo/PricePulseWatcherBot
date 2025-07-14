@@ -813,9 +813,11 @@ async def button(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     elif query.data == "list":
         subs = await list_subscriptions(query.message.chat_id)
         if not subs:
-
             text = f"{INFO_EMOJI} No active subscriptions"
-
+            await context.bot.send_message(
+                chat_id=query.message.chat_id,
+                text=text,
+            )
         else:
             for _, coin, threshold, interval, last_price, last_ts in subs:
                 price = await get_price(coin) or 0
@@ -873,9 +875,8 @@ async def menu(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
         subs = await list_subscriptions(update.effective_chat.id)
 
         if not subs:
-
             msg = f"{INFO_EMOJI} No active subscriptions"
-
+            await update.message.reply_text(msg, reply_markup=get_keyboard())
         else:
             for _, coin, threshold, interval, last_price, last_ts in subs:
                 price = await get_price(coin) or 0
