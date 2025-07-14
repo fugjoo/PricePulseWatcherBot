@@ -1,8 +1,8 @@
-# PricePulseWatcherBot
+# CoinNotifyBot
 
 Telegram bot that notifies you when a cryptocurrency moves by a chosen
 percentage. Create a `.env` from the example and keep your
-`TELEGRAM_TOKEN` secret. Talk to **@PricePulseWatcherBot** to get started.
+`TELEGRAM_TOKEN` secret. Talk to **@CoinNotifyBot** to get started.
 
 ## Features
 
@@ -32,7 +32,7 @@ price check frequency. Start the bot and run `/start` in a chat with it.
 - `/unsubscribe <coin>` – remove a subscription
 - `/list` – list active subscriptions
 - `/info <coin>` – show current coin data
-- `/chart <coin> [days]` – plot price history
+- `/chart <coin> [days]` – plot price history (alias `/charts`)
 - `/global` – show global market stats
 
 Intervals accept plain seconds or values like `1h`, `15m` or `30s`.
