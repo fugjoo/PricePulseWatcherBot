@@ -430,7 +430,12 @@ async def set_last_price(sub_id: int, price: float) -> None:
         await db.commit()
 
 
-async def send_rate_limited(bot: Bot, chat_id: int, text: str) -> None:
+DEFAULT_ALERT_EMOJI = "\U0001f680"
+
+
+async def send_rate_limited(
+    bot: Bot, chat_id: int, text: str, emoji: str = DEFAULT_ALERT_EMOJI
+) -> None:
     now = time.time()
     # cleanup timestamps
     user_q = user_messages[chat_id]
@@ -447,7 +452,7 @@ async def send_rate_limited(bot: Bot, chat_id: int, text: str) -> None:
         wait = 1 - (now - global_messages[0])
         await asyncio.sleep(wait)
 
-    await bot.send_message(chat_id=chat_id, text=text)
+    await bot.send_message(chat_id=chat_id, text=f"{emoji} {text}")
     user_q.append(time.time())
     global_messages.append(time.time())
 
@@ -485,25 +490,30 @@ async def check_prices(app) -> None:
                 symbol = symbol_for(coin)
                 if price > prev:
                     msg = (
-                        f"{symbol} breaks through ${level:.0f} "
-                        f"(now ${format_price(price)})"
+
+                        f"{symbol} {COIN_EMOJI} blasts past ${level:.0f} "
+                        f"(now ${price})"
                     )
+                    await send_rate_limited(app.bot, chat_id, msg, emoji=UP_EMOJI)
                 else:
                     msg = (
-                        f"{symbol} falls below ${level:.0f} "
-                        f"(now ${format_price(price)})"
+                        f"{symbol} {COIN_EMOJI} dives below ${level:.0f} "
+                        f"(now ${price})"
                     )
-                await send_rate_limited(app.bot, chat_id, msg)
+                    await send_rate_limited(app.bot, chat_id, msg, emoji=DOWN_EMOJI)
+
             MILESTONE_CACHE[(chat_id, coin)] = price
 
             if last_ts is None or time.time() - last_ts >= interval:
-                change = abs((price - last_price) / last_price * 100)
+                raw_change = (price - last_price) / last_price * 100
+                change = abs(raw_change)
                 if change >= threshold:
-                    text = (
-                        f"{symbol_for(coin)} moved {change:.2f}% to "
-                        f"${format_price(price)}"
-                    )
-                    await send_rate_limited(app.bot, chat_id, text)
+
+                    symbol = symbol_for(coin)
+                    emoji = UP_EMOJI if raw_change >= 0 else DOWN_EMOJI
+                    text = f"{symbol} {COIN_EMOJI} moved {raw_change:+.2f}% to ${price}"
+                    await send_rate_limited(app.bot, chat_id, text, emoji=emoji)
+
                 await set_last_price(sub_id, price)
 
 
@@ -511,6 +521,14 @@ SUB_EMOJI = "\U0001fa99"
 RELOAD_EMOJI = "\U0001f504"
 LIST_EMOJI = "\U0001f4cb"
 HELP_EMOJI = "\u2753"
+WELCOME_EMOJI = "\U0001f44b"
+INFO_EMOJI = "\u2139\ufe0f"
+SUCCESS_EMOJI = "\u2705"
+ERROR_EMOJI = "\u26a0\ufe0f"
+ALERT_EMOJI = "\U0001f680"  # rocket
+UP_EMOJI = "\U0001f680"  # rocket for rising prices
+DOWN_EMOJI = "\U0001f4a3"  # bomb for falling prices
+COIN_EMOJI = "\u20bf"  # bitcoin sign
 
 
 def get_keyboard() -> ReplyKeyboardMarkup:
@@ -533,13 +551,14 @@ def get_keyboard() -> ReplyKeyboardMarkup:
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     logger.debug("/start from %s", update.effective_chat.id)
     await update.message.reply_text(
-        "Welcome! Choose an action:", reply_markup=get_keyboard()
+        f"{WELCOME_EMOJI} Welcome! Choose an action:",
+        reply_markup=get_keyboard(),
     )
 
 
 async def help_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     await update.message.reply_text(
-        "/subscribe <coin> [pct] [interval] - subscribe to price alerts\n"
+        f"{INFO_EMOJI} /subscribe <coin> [pct] [interval] - subscribe to price alerts\n"
         "/unsubscribe <coin> - remove subscription\n"
         "/list - list subscriptions\n"
         "/info <coin> - coin information\n"
@@ -553,7 +572,8 @@ async def help_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
 async def subscribe_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     if not context.args:
         await update.message.reply_text(
-            "Usage: /subscribe <coin> [pct] [interval]", quote=True
+            f"{ERROR_EMOJI} Usage: /subscribe <coin> [pct] [interval]",
+            quote=True,
         )
         return
     coin = normalize_coin(context.args[0])
@@ -562,7 +582,7 @@ async def subscribe_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE) -> N
             float(context.args[1]) if len(context.args) > 1 else DEFAULT_THRESHOLD
         )
     except ValueError:
-        await update.message.reply_text("Threshold must be a number")
+        await update.message.reply_text(f"{ERROR_EMOJI} Threshold must be a number")
         return
 
     try:
@@ -572,7 +592,7 @@ async def subscribe_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE) -> N
         interval = parse_duration(interval_str)
     except ValueError:
         await update.message.reply_text(
-            "Interval must be a number or like 1h, 15m, 30s"
+            f"{ERROR_EMOJI} Interval must be a number or like 1h, 15m, 30s"
         )
         return
 
@@ -585,14 +605,17 @@ async def subscribe_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE) -> N
         interval,
     )
     await update.message.reply_text(
-        f"Subscribed to {symbol_for(coin)} at ±{threshold}% every {interval}s",
+        (
+            f"{SUCCESS_EMOJI} Subscribed to {symbol_for(coin)} at ±{threshold}% "
+            f"every {interval}s"
+        ),
         reply_markup=get_keyboard(),
     )
 
 
 async def unsubscribe_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     if not context.args:
-        await update.message.reply_text("Usage: /unsubscribe <coin>")
+        await update.message.reply_text(f"{ERROR_EMOJI} Usage: /unsubscribe <coin>")
         return
     coin = normalize_coin(context.args[0])
     await unsubscribe_coin(update.effective_chat.id, coin)
@@ -600,10 +623,12 @@ async def unsubscribe_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
     logger.info(
         "chat %s unsubscribes via command from %s", update.effective_chat.id, coin
     )
-    await update.message.reply_text(f"Unsubscribed from {symbol_for(coin)} alerts")
+    await update.message.reply_text(
+        f"{SUCCESS_EMOJI} Unsubscribed from {symbol_for(coin)} alerts"
+    )
 
     await update.message.reply_text(
-        f"Unsubscribed from {symbol_for(coin)} alerts",
+        f"{SUCCESS_EMOJI} Unsubscribed from {symbol_for(coin)} alerts",
         reply_markup=get_keyboard(),
     )
 
@@ -611,7 +636,7 @@ async def unsubscribe_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
 async def list_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     subs = await list_subscriptions(update.effective_chat.id)
     if not subs:
-        await update.message.reply_text("No active subscriptions")
+        await update.message.reply_text(f"{INFO_EMOJI} No active subscriptions")
         return
 
     for _, coin, threshold, interval, last_price, last_ts in subs:
@@ -636,12 +661,12 @@ async def list_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
 
 async def info_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     if not context.args:
-        await update.message.reply_text("Usage: /info <coin>")
+        await update.message.reply_text(f"{ERROR_EMOJI} Usage: /info <coin>")
         return
     coin = normalize_coin(context.args[0])
     data = await get_coin_info(coin)
     if not data:
-        await update.message.reply_text("Coin not found")
+        await update.message.reply_text(f"{ERROR_EMOJI} Coin not found")
         return
     market = data.get("market_data", {})
     price = market.get("current_price", {}).get("usd")
@@ -650,7 +675,7 @@ async def info_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     sym = data.get("symbol", "").upper()
     COIN_SYMBOLS[coin] = sym
     SYMBOL_TO_COIN[sym.lower()] = coin
-    text = f"{data.get('name')} ({sym})\n"
+    text = f"{INFO_EMOJI} {data.get('name')} ({sym})\n"
     if price is not None:
         text += f"Price: ${format_price(price)}\n"
     if cap is not None:
@@ -662,7 +687,7 @@ async def info_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
 
 async def chart_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     if not context.args:
-        await update.message.reply_text("Usage: /chart <coin> [days]")
+        await update.message.reply_text(f"{ERROR_EMOJI} Usage: /chart <coin> [days]")
         return
     coin = context.args[0].lower()
     days = 7
@@ -670,11 +695,11 @@ async def chart_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
         try:
             days = int(context.args[1])
         except ValueError:
-            await update.message.reply_text("Days must be a number")
+            await update.message.reply_text(f"{ERROR_EMOJI} Days must be a number")
             return
     data = await get_market_chart(coin, days)
     if not data:
-        await update.message.reply_text("No data available")
+        await update.message.reply_text(f"{ERROR_EMOJI} No data available")
         return
     times, prices = zip(*data)
     plt.figure(figsize=(6, 3))
@@ -691,13 +716,13 @@ async def chart_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
 async def global_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     data = await get_global_overview()
     if not data:
-        await update.message.reply_text("Failed to fetch data")
+        await update.message.reply_text(f"{ERROR_EMOJI} Failed to fetch data")
         return
     info = data.get("data", {})
     cap = info.get("total_market_cap", {}).get("usd")
     volume = info.get("total_volume", {}).get("usd")
     btc_dom = info.get("market_cap_percentage", {}).get("btc")
-    text = ""
+    text = f"{INFO_EMOJI} "
     if cap is not None:
         text += f"Market Cap: ${cap:,.0f}\n"
     if volume is not None:
@@ -722,28 +747,30 @@ async def button(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
         await context.bot.send_message(
             chat_id=query.message.chat_id,
             text=(
-                f"Subscribed to {symbol_for(coin)} at ±{DEFAULT_THRESHOLD}% "
-                f"every {DEFAULT_INTERVAL}s"
+                f"{SUCCESS_EMOJI} Subscribed to {symbol_for(coin)} at "
+                f"±{DEFAULT_THRESHOLD}% every {DEFAULT_INTERVAL}s"
             ),
         )
         await query.edit_message_reply_markup(reply_markup=get_keyboard())
     elif query.data.startswith("del:"):
         coin = query.data.split(":", 1)[1]
         await unsubscribe_coin(query.message.chat_id, coin)
-        await query.edit_message_text(f"Unsubscribed from {symbol_for(coin)}")
+        await query.edit_message_text(
+            f"{SUCCESS_EMOJI} Unsubscribed from {symbol_for(coin)}"
+        )
     elif query.data.startswith("edit:"):
         coin = query.data.split(":", 1)[1]
         await context.bot.send_message(
             chat_id=query.message.chat_id,
-            text=f"Use /subscribe {coin} [pct] [interval] to update",
+            text=f"{INFO_EMOJI} Use /subscribe {coin} [pct] [interval] to update",
         )
         await query.edit_message_reply_markup(reply_markup=None)
     elif query.data == "list":
         subs = await list_subscriptions(query.message.chat_id)
         if not subs:
-            await context.bot.send_message(
-                chat_id=query.message.chat_id, text="No active subscriptions"
-            )
+
+            text = f"{INFO_EMOJI} No active subscriptions"
+
         else:
             for _, coin, threshold, interval, last_price, last_ts in subs:
                 price = await get_price(coin) or 0
@@ -789,8 +816,8 @@ async def menu(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
             )
             await update.message.reply_text(
                 (
-                    f"Subscribed to {symbol_for(coin)} at ±{DEFAULT_THRESHOLD}% "
-                    f"every {DEFAULT_INTERVAL}s"
+                    f"{SUCCESS_EMOJI} Subscribed to {symbol_for(coin)} at "
+                    f"±{DEFAULT_THRESHOLD}% every {DEFAULT_INTERVAL}s"
                 ),
                 reply_markup=get_keyboard(),
             )
@@ -800,9 +827,9 @@ async def menu(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
         subs = await list_subscriptions(update.effective_chat.id)
 
         if not subs:
-            await update.message.reply_text(
-                "No active subscriptions", reply_markup=get_keyboard()
-            )
+
+            msg = f"{INFO_EMOJI} No active subscriptions"
+
         else:
             for _, coin, threshold, interval, last_price, last_ts in subs:
                 price = await get_price(coin) or 0
@@ -826,9 +853,12 @@ async def menu(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
                 await update.message.reply_text(msg, reply_markup=keyboard)
     elif text == f"{HELP_EMOJI} Help":
         await update.message.reply_text(
-            "/subscribe <coin> [pct] [seconds] - subscribe to price alerts\n"
-            "/unsubscribe <coin> - remove subscription\n"
-            "/list - list subscriptions",
+            (
+                f"{INFO_EMOJI} /subscribe <coin> [pct] [seconds] - subscribe to "
+                "price alerts\n"
+                "/unsubscribe <coin> - remove subscription\n"
+                "/list - list subscriptions"
+            ),
             reply_markup=get_keyboard(),
         )
 
