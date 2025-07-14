@@ -6,8 +6,9 @@ percentage. Create a `.env` from the example and keep your
 
 ## Features
 
-- Subscribe to trending coins and get alerts
-- Inline button to refresh the suggested coin
+ - Subscribe to trending coins and get alerts
+ - Inline button to refresh the suggested coin
+ - Suggest random coins from the top market cap list in the keyboard
 - Autocompletion for all bot commands
 
 ## Quickstart
