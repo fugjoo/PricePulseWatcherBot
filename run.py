@@ -489,17 +489,10 @@ async def check_prices(app) -> None:
             for level in milestones_crossed(prev, price):
                 symbol = symbol_for(coin)
                 if price > prev:
-                    msg = (
-
-                        f"{symbol} {COIN_EMOJI} blasts past ${level:.0f} "
-                        f"(now ${price})"
-                    )
+                    msg = f"{symbol} blasts past ${level:.0f} " f"(now ${price})"
                     await send_rate_limited(app.bot, chat_id, msg, emoji=UP_EMOJI)
                 else:
-                    msg = (
-                        f"{symbol} {COIN_EMOJI} dives below ${level:.0f} "
-                        f"(now ${price})"
-                    )
+                    msg = f"{symbol} dives below ${level:.0f} " f"(now ${price})"
                     await send_rate_limited(app.bot, chat_id, msg, emoji=DOWN_EMOJI)
 
             MILESTONE_CACHE[(chat_id, coin)] = price
@@ -511,7 +504,7 @@ async def check_prices(app) -> None:
 
                     symbol = symbol_for(coin)
                     emoji = UP_EMOJI if raw_change >= 0 else DOWN_EMOJI
-                    text = f"{symbol} {COIN_EMOJI} moved {raw_change:+.2f}% to ${price}"
+                    text = f"{symbol} moved {raw_change:+.2f}% to ${price}"
                     await send_rate_limited(app.bot, chat_id, text, emoji=emoji)
 
                 await set_last_price(sub_id, price)
@@ -528,7 +521,7 @@ ERROR_EMOJI = "\u26a0\ufe0f"
 ALERT_EMOJI = "\U0001f680"  # rocket
 UP_EMOJI = "\U0001f680"  # rocket for rising prices
 DOWN_EMOJI = "\U0001f4a3"  # bomb for falling prices
-COIN_EMOJI = "\u20bf"  # bitcoin sign
+COIN_EMOJI = ""  # coin symbol removed
 
 
 def get_keyboard() -> ReplyKeyboardMarkup:
@@ -562,7 +555,7 @@ async def help_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
         "/unsubscribe <coin> - remove subscription\n"
         "/list - list subscriptions\n"
         "/info <coin> - coin information\n"
-        "/chart <coin> [days] - price chart\n"
+        "/chart(s) <coin> [days] - price chart\n"
         "/global - global market stats\n"
         "Intervals can be like 1h, 15m or 30s",
         reply_markup=get_keyboard(),
@@ -883,6 +876,7 @@ async def main() -> None:
     app.add_handler(CommandHandler("list", list_cmd))
     app.add_handler(CommandHandler("info", info_cmd))
     app.add_handler(CommandHandler("chart", chart_cmd))
+    app.add_handler(CommandHandler("charts", chart_cmd))
     app.add_handler(CommandHandler("global", global_cmd))
     app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, menu))
     app.add_handler(CallbackQueryHandler(button))
@@ -904,6 +898,7 @@ async def main() -> None:
             BotCommand("list", "List subscriptions"),
             BotCommand("info", "Coin information"),
             BotCommand("chart", "Price chart"),
+            BotCommand("charts", "Price chart"),
             BotCommand("global", "Global market"),
         ]
     )
