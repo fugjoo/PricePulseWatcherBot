@@ -12,6 +12,14 @@ cp .env.example .env  # edit variables
 python run.py
 ```
 
+### One-click install
+
+Simply run the provided script to set up everything at once:
+
+```bash
+./install.sh
+```
+
 ### Docker
 
 ```bash
