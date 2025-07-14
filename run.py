@@ -18,15 +18,7 @@ import matplotlib
 from apscheduler.schedulers.asyncio import AsyncIOScheduler
 from dotenv import load_dotenv
 from matplotlib import pyplot as plt
-from telegram import (
-    Bot,
-    BotCommand,
-    InlineKeyboardButton,
-    InlineKeyboardMarkup,
-    KeyboardButton,
-    ReplyKeyboardMarkup,
-    Update,
-)
+from telegram import Bot, BotCommand, KeyboardButton, ReplyKeyboardMarkup, Update
 from telegram.ext import (
     ApplicationBuilder,
     CallbackQueryHandler,
@@ -349,6 +341,39 @@ async def get_coin_info(
     return None
 
 
+async def get_market_info(
+    coin: str, session: Optional[aiohttp.ClientSession] = None
+) -> Optional[dict]:
+    """Return basic market info for a coin."""
+    url = (
+        "https://api.coingecko.com/api/v3/coins/markets"
+        f"?vs_currency=usd&ids={coin}&price_change_percentage=24h"
+    )
+    owns_session = session is None
+    if owns_session:
+        session = aiohttp.ClientSession()
+    try:
+        async with REQUEST_LOCK:
+            global LAST_REQUEST
+            wait = max(0, LAST_REQUEST + 1.2 - time.time())
+            if wait:
+                await asyncio.sleep(wait)
+            try:
+                resp = await session.get(url)
+            except aiohttp.ClientError as exc:
+                logger.error("market info request failed: %s", exc)
+                return None
+            LAST_REQUEST = time.time()
+        if resp.status == 200:
+            data = await resp.json()
+            if data:
+                return data[0]
+    finally:
+        if owns_session and session:
+            await session.close()
+    return None
+
+
 async def get_market_chart(
     coin: str, days: int, session: Optional[aiohttp.ClientSession] = None
 ) -> Optional[list[tuple[float, float]]]:
@@ -601,7 +626,7 @@ ERROR_EMOJI = "\u26a0\ufe0f"
 def get_keyboard() -> ReplyKeyboardMarkup:
     coins_source = TOP_COINS or COINS or ["bitcoin"]
     coins = random.sample(coins_source, k=min(3, len(coins_source)))
-    subs = [KeyboardButton(f"{SUB_EMOJI} subscribe {symbol_for(c)}") for c in coins]
+    subs = [KeyboardButton(f"{SUB_EMOJI} Add {symbol_for(c)}") for c in coins]
     keyboard = [
         subs,
         [KeyboardButton(RELOAD_EMOJI)],
@@ -700,31 +725,31 @@ async def unsubscribe_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
     )
 
 
+async def build_sub_list(chat_id: int) -> Optional[str]:
+    """Return formatted subscription list for a chat."""
+    subs = await list_subscriptions(chat_id)
+    if not subs:
+        return None
+    lines: list[str] = []
+    for _, coin, threshold, interval, last_price, last_ts in subs:
+        info = await get_market_info(coin) or {}
+        price = info.get("current_price") or await get_price(coin) or 0
+        change_24h = info.get("price_change_percentage_24h")
+        line = f"{symbol_for(coin)} ${format_price(price)}"
+        if change_24h is not None:
+            line += f" ({change_24h:+.2f}% 24h)"
+        line += f" / ±{threshold}% every {interval}s"
+        lines.append(line)
+    return "\n".join(f"- {entry}" for entry in lines)
+
+
 async def list_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     """List all active subscriptions for the chat."""
-    subs = await list_subscriptions(update.effective_chat.id)
-    if not subs:
+    text = await build_sub_list(update.effective_chat.id)
+    if text is None:
         await update.message.reply_text(f"{INFO_EMOJI} No active subscriptions")
         return
-
-    for _, coin, threshold, interval, last_price, last_ts in subs:
-        price = await get_price(coin) or 0
-        change = 0.0
-        if last_price:
-            change = (price - last_price) / last_price * 100
-        text = (
-            f"{symbol_for(coin)} ${format_price(price)} {change:+.2f}% "
-            f"/ ±{threshold}% every {interval}s"
-        )
-        keyboard = InlineKeyboardMarkup(
-            [
-                [
-                    InlineKeyboardButton("Unsubscribe", callback_data=f"del:{coin}"),
-                    InlineKeyboardButton("Edit", callback_data=f"edit:{coin}"),
-                ]
-            ]
-        )
-        await update.message.reply_text(text, reply_markup=keyboard)
+    await update.message.reply_text(text, reply_markup=get_keyboard())
 
 
 async def info_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
@@ -847,38 +872,13 @@ async def button(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
         )
         await query.edit_message_reply_markup(reply_markup=None)
     elif query.data == "list":
-        subs = await list_subscriptions(query.message.chat_id)
-        if not subs:
+        text = await build_sub_list(query.message.chat_id)
+        if text is None:
             text = f"{INFO_EMOJI} No active subscriptions"
-            await context.bot.send_message(
-                chat_id=query.message.chat_id,
-                text=text,
-            )
-        else:
-            for _, coin, threshold, interval, last_price, last_ts in subs:
-                price = await get_price(coin) or 0
-                change = 0.0
-                if last_price:
-                    change = (price - last_price) / last_price * 100
-                text = (
-                    f"{symbol_for(coin)} ${format_price(price)} {change:+.2f}% "
-                    f"/ ±{threshold}% every {interval}s"
-                )
-                keyboard = InlineKeyboardMarkup(
-                    [
-                        [
-                            InlineKeyboardButton(
-                                "Unsubscribe", callback_data=f"del:{coin}"
-                            ),
-                            InlineKeyboardButton("Edit", callback_data=f"edit:{coin}"),
-                        ]
-                    ]
-                )
-                await context.bot.send_message(
-                    chat_id=query.message.chat_id,
-                    text=text,
-                    reply_markup=keyboard,
-                )
+        await context.bot.send_message(
+            chat_id=query.message.chat_id,
+            text=text,
+        )
         await query.edit_message_reply_markup(reply_markup=get_keyboard())
 
 
@@ -890,7 +890,7 @@ async def menu(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
 
     if text.startswith(SUB_EMOJI):
         parts = text.split()
-        if len(parts) >= 3 and parts[1] == "Subscribe":
+        if len(parts) >= 3 and parts[1] == "Add":
             coin = normalize_coin(parts[2])
             await subscribe_coin(
                 update.effective_chat.id,
@@ -908,42 +908,9 @@ async def menu(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     elif text == RELOAD_EMOJI:
         await update.message.reply_text("New suggestion:", reply_markup=get_keyboard())
     elif text == f"{LIST_EMOJI} List":
-        subs = await list_subscriptions(update.effective_chat.id)
-
-        if not subs:
-            msg = f"{INFO_EMOJI} No active subscriptions"
-            await update.message.reply_text(msg, reply_markup=get_keyboard())
-        else:
-            for _, coin, threshold, interval, last_price, last_ts in subs:
-                price = await get_price(coin) or 0
-                change = 0.0
-                if last_price:
-                    change = (price - last_price) / last_price * 100
-                msg = (
-                    f"{symbol_for(coin)} ${format_price(price)} {change:+.2f}% "
-                    f"/ ±{threshold}% every {interval}s"
-                )
-                keyboard = InlineKeyboardMarkup(
-                    [
-                        [
-                            InlineKeyboardButton(
-                                "Unsubscribe", callback_data=f"del:{coin}"
-                            ),
-                            InlineKeyboardButton("Edit", callback_data=f"edit:{coin}"),
-                        ]
-                    ]
-                )
-                await update.message.reply_text(msg, reply_markup=keyboard)
+        await list_cmd(update, context)
     elif text == f"{HELP_EMOJI} Help":
-        await update.message.reply_text(
-            (
-                f"{INFO_EMOJI} /add <coin> [pct] [seconds] - subscribe to "
-                "price alerts\n"
-                "/remove <coin> - remove subscription\n"
-                "/list - list subscriptions"
-            ),
-            reply_markup=get_keyboard(),
-        )
+        await help_cmd(update, context)
 
 
 async def main() -> None:
