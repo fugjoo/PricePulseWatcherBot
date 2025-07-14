@@ -1,0 +1,5 @@
+python-dotenv
+python-telegram-bot==21.11.1
+aiohttp
+aiosqlite
+APScheduler
