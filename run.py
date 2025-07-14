@@ -1,6 +1,7 @@
 import asyncio
 import logging
 import os
+import random
 import signal
 import time
 from collections import defaultdict, deque
@@ -25,7 +26,8 @@ from telegram.ext import (
 matplotlib.use("Agg")
 
 DB_FILE = "subs.db"
-DEFAULT_THRESHOLD = 3.0
+DEFAULT_THRESHOLD = 0.1
+DEFAULT_INTERVAL = 60
 
 COINS = ["bitcoin", "ethereum", "litecoin", "dogecoin"]
 
@@ -71,6 +73,7 @@ async def init_db() -> None:
                 chat_id INTEGER NOT NULL,
                 coin_id TEXT NOT NULL,
                 threshold REAL NOT NULL,
+                interval INTEGER NOT NULL DEFAULT 60,
                 last_price REAL,
                 last_alert_ts REAL
             )
@@ -82,6 +85,13 @@ async def init_db() -> None:
         columns = {row[1] for row in rows}
         if "last_alert_ts" not in columns:
             await db.execute("ALTER TABLE subscriptions ADD COLUMN last_alert_ts REAL")
+        if "interval" not in columns:
+            await db.execute(
+                (
+                    "ALTER TABLE subscriptions "
+                    "ADD COLUMN interval INTEGER NOT NULL DEFAULT 60"
+                )
+            )
         await db.commit()
 
 
@@ -217,17 +227,25 @@ async def get_global_overview(
     return None
 
 
-async def subscribe_coin(chat_id: int, coin: str, threshold: float) -> None:
+async def subscribe_coin(
+    chat_id: int, coin: str, threshold: float, interval: int
+) -> None:
     async with aiosqlite.connect(DB_FILE) as db:
         await db.execute(
             """
-            INSERT INTO subscriptions (chat_id, coin_id, threshold)
-            VALUES (?, ?, ?)
+            INSERT INTO subscriptions (chat_id, coin_id, threshold, interval)
+            VALUES (?, ?, ?, ?)
             """,
-            (chat_id, coin, threshold),
+            (chat_id, coin, threshold, interval),
         )
         await db.commit()
-    logger.info("chat %s subscribed to %s at ±%s%%", chat_id, coin, threshold)
+    logger.info(
+        "chat %s subscribed to %s at ±%s%% every %ss",
+        chat_id,
+        coin,
+        threshold,
+        interval,
+    )
 
 
 async def unsubscribe_coin(chat_id: int, coin: str) -> None:
@@ -240,15 +258,28 @@ async def unsubscribe_coin(chat_id: int, coin: str) -> None:
     logger.info("chat %s unsubscribed from %s", chat_id, coin)
 
 
-async def list_subscriptions(chat_id: int) -> list[Tuple[str, float]]:
+async def list_subscriptions(
+    chat_id: int,
+) -> list[Tuple[int, str, float, int, Optional[float], Optional[float]]]:
     async with aiosqlite.connect(DB_FILE) as db:
         cursor = await db.execute(
-            "SELECT coin_id, threshold FROM subscriptions WHERE chat_id=?",
+            "SELECT id, coin_id, threshold, interval, last_price, last_alert_ts "
+            "FROM subscriptions WHERE chat_id=?",
             (chat_id,),
         )
         rows = await cursor.fetchall()
         await cursor.close()
-        return [(row[0], row[1]) for row in rows]
+        return [
+            (
+                row[0],
+                row[1],
+                row[2],
+                row[3],
+                row[4],
+                row[5],
+            )
+            for row in rows
+        ]
 
 
 async def set_last_price(sub_id: int, price: float) -> None:
@@ -286,27 +317,33 @@ async def check_prices(app) -> None:
     """Iterate subscriptions, alert on significant price changes."""
     async with aiosqlite.connect(DB_FILE) as db:
         cursor = await db.execute(
-            "SELECT id, chat_id, coin_id, threshold, last_price FROM subscriptions"
+            "SELECT id, chat_id, coin_id, threshold, interval, last_price, "
+            "last_alert_ts FROM subscriptions"
         )
         rows = await cursor.fetchall()
         await cursor.close()
 
-    by_coin: Dict[str, list[Tuple[int, int, float, Optional[float]]]] = {}
-    for sub_id, chat_id, coin, threshold, last_price in rows:
-        by_coin.setdefault(coin, []).append((sub_id, chat_id, threshold, last_price))
+    by_coin: Dict[
+        str, list[Tuple[int, int, float, int, Optional[float], Optional[float]]]
+    ] = {}
+    for sub_id, chat_id, coin, threshold, interval, last_price, last_ts in rows:
+        by_coin.setdefault(coin, []).append(
+            (sub_id, chat_id, threshold, interval, last_price, last_ts)
+        )
 
     for coin, subscriptions in by_coin.items():
         price = await get_price(coin)
         if price is None:
             continue
-        for sub_id, chat_id, threshold, last_price in subscriptions:
+        for sub_id, chat_id, threshold, interval, last_price, last_ts in subscriptions:
             if last_price is None:
                 await set_last_price(sub_id, price)
                 continue
-            change = abs((price - last_price) / last_price * 100)
-            if change >= threshold:
-                text = f"{coin.upper()} moved {change:.2f}% to ${price:.2f}"
-                await send_rate_limited(app.bot, chat_id, text)
+            if last_ts is None or time.time() - last_ts >= interval:
+                change = abs((price - last_price) / last_price * 100)
+                if change >= threshold:
+                    text = f"{coin.upper()} moved {change:.2f}% to ${price:.2f}"
+                    await send_rate_limited(app.bot, chat_id, text)
                 await set_last_price(sub_id, price)
 
 
@@ -316,18 +353,11 @@ HELP_EMOJI = "\u2753"
 
 
 def get_keyboard() -> ReplyKeyboardMarkup:
-    rows = []
-    for i, coin in enumerate(COINS[:10]):
-        if i % 2 == 0:
-            rows.append([])
-        rows[-1].append(KeyboardButton(f"{SUB_EMOJI} Subscribe {coin.upper()}"))
-    rows.append(
-        [
-            KeyboardButton(f"{LIST_EMOJI} List"),
-            KeyboardButton(f"{HELP_EMOJI} Help"),
-        ]
-    )
-    keyboard = rows
+    coin = random.choice(COINS[:10]) if COINS else "bitcoin"
+    keyboard = [
+        [KeyboardButton(f"{SUB_EMOJI} Subscribe {coin.upper()}")],
+        [KeyboardButton(f"{LIST_EMOJI} List"), KeyboardButton(f"{HELP_EMOJI} Help")],
+    ]
     return ReplyKeyboardMarkup(
         keyboard,
         resize_keyboard=True,
@@ -344,7 +374,7 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
 
 async def help_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     await update.message.reply_text(
-        "/subscribe <coin> [pct] - subscribe to price alerts\n"
+        "/subscribe <coin> [pct] [seconds] - subscribe to price alerts\n"
         "/unsubscribe <coin> - remove subscription\n"
         "/list - list subscriptions",
         reply_markup=get_keyboard(),
@@ -353,7 +383,9 @@ async def help_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
 
 async def subscribe_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     if not context.args:
-        await update.message.reply_text("Usage: /subscribe <coin> [pct]", quote=True)
+        await update.message.reply_text(
+            "Usage: /subscribe <coin> [pct] [seconds]", quote=True
+        )
         return
     coin = context.args[0].lower()
     try:
@@ -364,15 +396,22 @@ async def subscribe_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE) -> N
         await update.message.reply_text("Threshold must be a number")
         return
 
-    await subscribe_coin(update.effective_chat.id, coin, threshold)
+    try:
+        interval = int(context.args[2]) if len(context.args) > 2 else DEFAULT_INTERVAL
+    except ValueError:
+        await update.message.reply_text("Interval must be a number")
+        return
+
+    await subscribe_coin(update.effective_chat.id, coin, threshold, interval)
     logger.info(
-        "chat %s subscribes via command to %s at %.2f%%",
+        "chat %s subscribes via command to %s at %.2f%% every %ss",
         update.effective_chat.id,
         coin,
         threshold,
+        interval,
     )
     await update.message.reply_text(
-        f"Subscribed to {coin.upper()} price alerts at ±{threshold}%",
+        f"Subscribed to {coin.upper()} at ±{threshold}% every {interval}s",
         reply_markup=get_keyboard(),
     )
 
@@ -400,7 +439,17 @@ async def list_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     if not subs:
         text = "No active subscriptions"
     else:
-        text = "\n".join(f"{c.upper()} ±{t}%" for c, t in subs)
+        lines = []
+        for _, coin, threshold, interval, last_price, last_ts in subs:
+            price = await get_price(coin) or 0
+            change = 0.0
+            if last_price:
+                change = (price - last_price) / last_price * 100
+            lines.append(
+                f"{coin.upper()} ${price:.2f} {change:+.2f}% / ±{threshold}% "
+                f"every {interval}s"
+            )
+        text = "\n".join(lines)
 
     await update.message.reply_text(text)
 
@@ -480,11 +529,19 @@ async def button(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     await query.answer()
     if query.data.startswith("sub:"):
         coin = query.data.split(":", 1)[1]
-        await subscribe_coin(query.message.chat_id, coin, DEFAULT_THRESHOLD)
+        await subscribe_coin(
+            query.message.chat_id,
+            coin,
+            DEFAULT_THRESHOLD,
+            DEFAULT_INTERVAL,
+        )
         logger.info("chat %s subscribed via button to %s", query.message.chat_id, coin)
         await context.bot.send_message(
             chat_id=query.message.chat_id,
-            text=f"Subscribed to {coin.upper()} alerts at ±{DEFAULT_THRESHOLD}%",
+            text=(
+                f"Subscribed to {coin.upper()} at ±{DEFAULT_THRESHOLD}% "
+                f"every {DEFAULT_INTERVAL}s"
+            ),
         )
         await query.edit_message_reply_markup(reply_markup=get_keyboard())
     elif query.data == "list":
@@ -492,7 +549,17 @@ async def button(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
         if not subs:
             text = "No active subscriptions"
         else:
-            text = "\n".join(f"{c.upper()} ±{t}%" for c, t in subs)
+            lines = []
+            for _, coin, threshold, interval, last_price, last_ts in subs:
+                price = await get_price(coin) or 0
+                change = 0.0
+                if last_price:
+                    change = (price - last_price) / last_price * 100
+                lines.append(
+                    f"{coin.upper()} ${price:.2f} {change:+.2f}% / ±{threshold}% "
+                    f"every {interval}s"
+                )
+            text = "\n".join(lines)
         await context.bot.send_message(chat_id=query.message.chat_id, text=text)
         await query.edit_message_reply_markup(reply_markup=get_keyboard())
 
@@ -506,9 +573,17 @@ async def menu(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
         parts = text.split()
         if len(parts) >= 3 and parts[1] == "Subscribe":
             coin = parts[2].lower()
-            await subscribe_coin(update.effective_chat.id, coin, DEFAULT_THRESHOLD)
+            await subscribe_coin(
+                update.effective_chat.id,
+                coin,
+                DEFAULT_THRESHOLD,
+                DEFAULT_INTERVAL,
+            )
             await update.message.reply_text(
-                f"Subscribed to {coin.upper()} alerts at ±{DEFAULT_THRESHOLD}%",
+                (
+                    f"Subscribed to {coin.upper()} at ±{DEFAULT_THRESHOLD}% "
+                    f"every {DEFAULT_INTERVAL}s"
+                ),
                 reply_markup=get_keyboard(),
             )
     elif text == f"{LIST_EMOJI} List":
@@ -517,11 +592,21 @@ async def menu(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
         if not subs:
             msg = "No active subscriptions"
         else:
-            msg = "\n".join(f"{c.upper()} ±{t}%" for c, t in subs)
+            lines = []
+            for _, coin, threshold, interval, last_price, last_ts in subs:
+                price = await get_price(coin) or 0
+                change = 0.0
+                if last_price:
+                    change = (price - last_price) / last_price * 100
+                lines.append(
+                    f"{coin.upper()} ${price:.2f} {change:+.2f}% / ±{threshold}% "
+                    f"every {interval}s"
+                )
+            msg = "\n".join(lines)
         await update.message.reply_text(msg, reply_markup=get_keyboard())
     elif text == f"{HELP_EMOJI} Help":
         await update.message.reply_text(
-            "/subscribe <coin> [pct] - subscribe to price alerts\n"
+            "/subscribe <coin> [pct] [seconds] - subscribe to price alerts\n"
             "/unsubscribe <coin> - remove subscription\n"
             "/list - list subscriptions",
             reply_markup=get_keyboard(),
@@ -552,6 +637,7 @@ async def main() -> None:
 
     scheduler = AsyncIOScheduler()
     scheduler.add_job(check_prices, "interval", seconds=10, args=(app,))
+    scheduler.add_job(fetch_trending_coins, "interval", minutes=10)
     scheduler.start()
 
     await app.initialize()
