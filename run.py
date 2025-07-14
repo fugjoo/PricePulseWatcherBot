@@ -19,6 +19,7 @@ from dotenv import load_dotenv
 from matplotlib import pyplot as plt
 from telegram import (
     Bot,
+    BotCommand,
     InlineKeyboardButton,
     InlineKeyboardMarkup,
     KeyboardButton,
@@ -507,6 +508,7 @@ async def check_prices(app) -> None:
 
 
 SUB_EMOJI = "\U0001fa99"
+RELOAD_EMOJI = "\U0001f504"
 LIST_EMOJI = "\U0001f4cb"
 HELP_EMOJI = "\u2753"
 
@@ -515,7 +517,10 @@ def get_keyboard() -> ReplyKeyboardMarkup:
     coin = random.choice(COINS[:10]) if COINS else "bitcoin"
     symbol = symbol_for(coin)
     keyboard = [
-        [KeyboardButton(f"{SUB_EMOJI} Subscribe {symbol}")],
+        [
+            KeyboardButton(f"{SUB_EMOJI} Subscribe {symbol}"),
+            KeyboardButton(RELOAD_EMOJI),
+        ],
         [KeyboardButton(f"{LIST_EMOJI} List"), KeyboardButton(f"{HELP_EMOJI} Help")],
     ]
     return ReplyKeyboardMarkup(
@@ -537,7 +542,10 @@ async def help_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
         "/subscribe <coin> [pct] [interval] - subscribe to price alerts\n"
         "/unsubscribe <coin> - remove subscription\n"
         "/list - list subscriptions\n"
-        "Intervals can be given like 1h, 15m or 30s",
+        "/info <coin> - coin information\n"
+        "/chart <coin> [days] - price chart\n"
+        "/global - global market stats\n"
+        "Intervals can be like 1h, 15m or 30s",
         reply_markup=get_keyboard(),
     )
 
@@ -786,6 +794,8 @@ async def menu(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
                 ),
                 reply_markup=get_keyboard(),
             )
+    elif text == RELOAD_EMOJI:
+        await update.message.reply_text("New suggestion:", reply_markup=get_keyboard())
     elif text == f"{LIST_EMOJI} List":
         subs = await list_subscriptions(update.effective_chat.id)
 
@@ -855,6 +865,18 @@ async def main() -> None:
     scheduler.start()
 
     await app.initialize()
+    await app.bot.set_my_commands(
+        [
+            BotCommand("start", "Show menu"),
+            BotCommand("help", "Show help"),
+            BotCommand("subscribe", "Subscribe to price alerts"),
+            BotCommand("unsubscribe", "Remove subscription"),
+            BotCommand("list", "List subscriptions"),
+            BotCommand("info", "Coin information"),
+            BotCommand("chart", "Price chart"),
+            BotCommand("global", "Global market"),
+        ]
+    )
     await app.start()
     await app.updater.start_polling()
     logger.info("Bot started")
