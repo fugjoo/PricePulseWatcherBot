@@ -3,7 +3,7 @@
 # This script sets up a Python virtual environment, installs dependencies,
 # and prepares the .env configuration file.
 
-set -e
+set -euo pipefail
 
 # Determine project root (directory of this script)
 ROOT_DIR="$(cd "$(dirname "$0")" && pwd)"
