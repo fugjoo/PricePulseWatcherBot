@@ -20,8 +20,11 @@ python3 -m venv venv
 source venv/bin/activate
 pip install -r requirements.txt
 cp .env.example .env  # edit TELEGRAM_TOKEN and OPENAI_API_KEY
+cp config.json.example config.json  # optional defaults
 python run.py
 ```
+
+Adjust values in `config.json` to change the default alert threshold or interval.
 
 The bot uses APScheduler to check prices every 10 seconds. Ensure the
 `python-telegram-bot` package is installed with the `job-queue` extra as
@@ -31,11 +34,12 @@ Start the bot and use `/start` in a chat with your bot. You can then subscribe
 to coin alerts with:
 
 ```bash
-/subscribe <coin> [percent]
+/subscribe <coin> [percent] [interval]
 ```
 
-List active subscriptions with `/list` and remove them using
-`/unsubscribe <coin>`.
+Intervals can be specified in seconds or with suffixes like `1h`, `15m` or `30s`.
+
+List active subscriptions with `/list` and remove them using `/unsubscribe <coin>`.
 
 ### One-click install
 
