@@ -7,6 +7,7 @@ import re
 import signal
 import time
 from collections import defaultdict, deque
+from decimal import Decimal
 from io import BytesIO
 from typing import Deque, Dict, Optional, Tuple
 
@@ -38,6 +39,7 @@ matplotlib.use("Agg")
 DB_FILE = "subs.db"
 DEFAULT_THRESHOLD = 0.1
 DEFAULT_INTERVAL = 60
+PRICE_CHECK_INTERVAL = 60
 
 
 def parse_duration(value: str) -> int:
@@ -63,7 +65,7 @@ def load_config(path: str = "config.json") -> None:
         logger.warning("failed to load config: %s", exc)
         return
 
-    global DEFAULT_THRESHOLD, DEFAULT_INTERVAL
+    global DEFAULT_THRESHOLD, DEFAULT_INTERVAL, PRICE_CHECK_INTERVAL
     if "default_threshold" in data:
         try:
             DEFAULT_THRESHOLD = float(data["default_threshold"])
@@ -74,6 +76,11 @@ def load_config(path: str = "config.json") -> None:
             DEFAULT_INTERVAL = parse_duration(str(data["default_interval"]))
         except ValueError:
             logger.warning("invalid default_interval in config")
+    if "price_check_interval" in data:
+        try:
+            PRICE_CHECK_INTERVAL = parse_duration(str(data["price_check_interval"]))
+        except ValueError:
+            logger.warning("invalid price_check_interval in config")
 
 
 COINS = ["bitcoin", "ethereum", "litecoin", "dogecoin"]
@@ -152,6 +159,11 @@ def milestone_step(price: float) -> float:
     if price >= 0.1:
         return 0.01
     return 0.001
+
+
+def format_price(value: float) -> str:
+    """Return price as decimal string without scientific notation."""
+    return format(Decimal(str(value)), "f")
 
 
 def milestones_crossed(last: float, current: float) -> list[float]:
@@ -471,16 +483,25 @@ async def check_prices(app) -> None:
             for level in milestones_crossed(prev, price):
                 symbol = symbol_for(coin)
                 if price > prev:
-                    msg = f"{symbol} breaks through ${level:.0f} " f"(now ${price})"
+                    msg = (
+                        f"{symbol} breaks through ${level:.0f} "
+                        f"(now ${format_price(price)})"
+                    )
                 else:
-                    msg = f"{symbol} falls below ${level:.0f} " f"(now ${price})"
+                    msg = (
+                        f"{symbol} falls below ${level:.0f} "
+                        f"(now ${format_price(price)})"
+                    )
                 await send_rate_limited(app.bot, chat_id, msg)
             MILESTONE_CACHE[(chat_id, coin)] = price
 
             if last_ts is None or time.time() - last_ts >= interval:
                 change = abs((price - last_price) / last_price * 100)
                 if change >= threshold:
-                    text = f"{symbol_for(coin)} moved {change:.2f}% to ${price}"
+                    text = (
+                        f"{symbol_for(coin)} moved {change:.2f}% to "
+                        f"${format_price(price)}"
+                    )
                     await send_rate_limited(app.bot, chat_id, text)
                 await set_last_price(sub_id, price)
 
@@ -591,8 +612,8 @@ async def list_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
         if last_price:
             change = (price - last_price) / last_price * 100
         text = (
-            f"{symbol_for(coin)} ${price} {change:+.2f}% / ±{threshold}% "
-            f"every {interval}s"
+            f"{symbol_for(coin)} ${format_price(price)} {change:+.2f}% "
+            f"/ ±{threshold}% every {interval}s"
         )
         keyboard = InlineKeyboardMarkup(
             [
@@ -623,7 +644,7 @@ async def info_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     SYMBOL_TO_COIN[sym.lower()] = coin
     text = f"{data.get('name')} ({sym})\n"
     if price is not None:
-        text += f"Price: ${price}\n"
+        text += f"Price: ${format_price(price)}\n"
     if cap is not None:
         text += f"Market Cap: ${cap:,.0f}\n"
     if change is not None:
@@ -712,20 +733,34 @@ async def button(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     elif query.data == "list":
         subs = await list_subscriptions(query.message.chat_id)
         if not subs:
-            text = "No active subscriptions"
+            await context.bot.send_message(
+                chat_id=query.message.chat_id, text="No active subscriptions"
+            )
         else:
-            lines = []
             for _, coin, threshold, interval, last_price, last_ts in subs:
                 price = await get_price(coin) or 0
                 change = 0.0
                 if last_price:
                     change = (price - last_price) / last_price * 100
-                lines.append(
-                    f"{symbol_for(coin)} ${price} {change:+.2f}% / ±{threshold}% "
-                    f"every {interval}s"
+                text = (
+                    f"{symbol_for(coin)} ${format_price(price)} {change:+.2f}% "
+                    f"/ ±{threshold}% every {interval}s"
                 )
-            text = "\n".join(lines)
-        await context.bot.send_message(chat_id=query.message.chat_id, text=text)
+                keyboard = InlineKeyboardMarkup(
+                    [
+                        [
+                            InlineKeyboardButton(
+                                "Unsubscribe", callback_data=f"del:{coin}"
+                            ),
+                            InlineKeyboardButton("Edit", callback_data=f"edit:{coin}"),
+                        ]
+                    ]
+                )
+                await context.bot.send_message(
+                    chat_id=query.message.chat_id,
+                    text=text,
+                    reply_markup=keyboard,
+                )
         await query.edit_message_reply_markup(reply_markup=get_keyboard())
 
 
@@ -755,20 +790,30 @@ async def menu(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
         subs = await list_subscriptions(update.effective_chat.id)
 
         if not subs:
-            msg = "No active subscriptions"
+            await update.message.reply_text(
+                "No active subscriptions", reply_markup=get_keyboard()
+            )
         else:
-            lines = []
             for _, coin, threshold, interval, last_price, last_ts in subs:
                 price = await get_price(coin) or 0
                 change = 0.0
                 if last_price:
                     change = (price - last_price) / last_price * 100
-                lines.append(
-                    f"{symbol_for(coin)} ${price} {change:+.2f}% / ±{threshold}% "
-                    f"every {interval}s"
+                msg = (
+                    f"{symbol_for(coin)} ${format_price(price)} {change:+.2f}% "
+                    f"/ ±{threshold}% every {interval}s"
                 )
-            msg = "\n".join(lines)
-        await update.message.reply_text(msg, reply_markup=get_keyboard())
+                keyboard = InlineKeyboardMarkup(
+                    [
+                        [
+                            InlineKeyboardButton(
+                                "Unsubscribe", callback_data=f"del:{coin}"
+                            ),
+                            InlineKeyboardButton("Edit", callback_data=f"edit:{coin}"),
+                        ]
+                    ]
+                )
+                await update.message.reply_text(msg, reply_markup=keyboard)
     elif text == f"{HELP_EMOJI} Help":
         await update.message.reply_text(
             "/subscribe <coin> [pct] [seconds] - subscribe to price alerts\n"
@@ -803,7 +848,9 @@ async def main() -> None:
     app.add_handler(CallbackQueryHandler(button))
 
     scheduler = AsyncIOScheduler()
-    scheduler.add_job(check_prices, "interval", seconds=10, args=(app,))
+    scheduler.add_job(
+        check_prices, "interval", seconds=PRICE_CHECK_INTERVAL, args=(app,)
+    )
     scheduler.add_job(fetch_trending_coins, "interval", minutes=10)
     scheduler.start()
 

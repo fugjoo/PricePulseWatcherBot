@@ -24,9 +24,10 @@ cp config.json.example config.json  # optional defaults
 python run.py
 ```
 
-Adjust values in `config.json` to change the default alert threshold or interval.
+Adjust values in `config.json` to change the default alert threshold, the
+default subscription interval or how often the bot queries the API.
 
-The bot uses APScheduler to check prices every 10 seconds. Ensure the
+The bot uses APScheduler to check prices every 60 seconds by default. Ensure the
 `python-telegram-bot` package is installed with the `job-queue` extra as
 specified in `requirements.txt`.
 
@@ -38,6 +39,9 @@ to coin alerts with:
 ```
 
 Intervals can be specified in seconds or with suffixes like `1h`, `15m` or `30s`.
+
+`price_check_interval` in `config.json` controls how often the bot polls the
+API for price updates.
 
 List active subscriptions with `/list` and remove them using `/unsubscribe <coin>`.
 
