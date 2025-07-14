@@ -62,6 +62,41 @@ LAST_REQUEST = 0.0
 user_messages: Dict[int, Deque[float]] = defaultdict(deque)
 global_messages: Deque[float] = deque()
 
+# milestone cache: (chat_id, coin) -> last checked price
+MILESTONE_CACHE: Dict[Tuple[int, str], float] = {}
+
+
+def milestone_step(price: float) -> float:
+    """Return step size for round-number alerts based on price."""
+    if price >= 1000:
+        return 100.0
+    if price >= 100:
+        return 10.0
+    if price >= 10:
+        return 1.0
+    if price >= 1:
+        return 0.1
+    if price >= 0.1:
+        return 0.01
+    return 0.001
+
+
+def milestones_crossed(last: float, current: float) -> list[float]:
+    """Return a list of price levels crossed between two prices."""
+    step = milestone_step(max(last, current))
+    levels: list[float] = []
+    if current > last:
+        boundary = (int(last // step) * step) + step
+        while boundary <= current:
+            levels.append(boundary)
+            boundary += step
+    elif current < last:
+        boundary = int(last // step) * step
+        while boundary > current:
+            levels.append(boundary)
+            boundary -= step
+    return levels
+
 
 async def init_db() -> None:
     """Ensure the subscriptions table exists."""
@@ -338,7 +373,24 @@ async def check_prices(app) -> None:
         for sub_id, chat_id, threshold, interval, last_price, last_ts in subscriptions:
             if last_price is None:
                 await set_last_price(sub_id, price)
+                MILESTONE_CACHE[(chat_id, coin)] = price
                 continue
+
+            prev = MILESTONE_CACHE.get((chat_id, coin), last_price)
+            for level in milestones_crossed(prev, price):
+                if price > prev:
+                    msg = (
+                        f"{coin.upper()} breaks through ${level:.0f} "
+                        f"(now ${price:.2f})"
+                    )
+                else:
+                    msg = (
+                        f"{coin.upper()} falls below ${level:.0f} "
+                        f"(now ${price:.2f})"
+                    )
+                await send_rate_limited(app.bot, chat_id, msg)
+            MILESTONE_CACHE[(chat_id, coin)] = price
+
             if last_ts is None or time.time() - last_ts >= interval:
                 change = abs((price - last_price) / last_price * 100)
                 if change >= threshold:
