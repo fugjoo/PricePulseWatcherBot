@@ -5,7 +5,7 @@ Users can subscribe to coins and receive a message when the price changes more
 than a chosen percentage.
 
 Create a `.env` file from the provided example and keep your
-`TELEGRAM_TOKEN` and `OPENAI_API_KEY` private.
+`TELEGRAM_TOKEN` private.
 
 ## Quickstart
 
@@ -19,14 +19,15 @@ python3 --version
 python3 -m venv venv
 source venv/bin/activate
 pip install -r requirements.txt
-cp .env.example .env  # edit TELEGRAM_TOKEN and OPENAI_API_KEY
+cp .env.example .env  # edit TELEGRAM_TOKEN
 cp config.json.example config.json  # optional defaults
 python run.py
 ```
 
-Adjust values in `config.json` to change the default alert threshold or interval.
+Adjust values in `config.json` to change the default alert threshold, the
+default subscription interval or how often the bot queries the API.
 
-The bot uses APScheduler to check prices every 10 seconds. Ensure the
+The bot uses APScheduler to check prices every 60 seconds by default. Ensure the
 `python-telegram-bot` package is installed with the `job-queue` extra as
 specified in `requirements.txt`.
 
@@ -38,6 +39,9 @@ to coin alerts with:
 ```
 
 Intervals can be specified in seconds or with suffixes like `1h`, `15m` or `30s`.
+
+`price_check_interval` in `config.json` controls how often the bot polls the
+API for price updates.
 
 List active subscriptions with `/list` and remove them using `/unsubscribe <coin>`.
 
@@ -57,3 +61,7 @@ is not available, the script will attempt to install it via `apt`, `yum` or
 docker build -t crypto-bot .
 docker run --env-file .env crypto-bot
 ```
+
+## License
+
+This project is licensed under the [MIT License](LICENSE).
