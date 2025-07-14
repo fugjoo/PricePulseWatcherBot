@@ -9,15 +9,26 @@ set -e
 ROOT_DIR="$(cd "$(dirname "$0")" && pwd)"
 cd "$ROOT_DIR"
 
-# Check for Python 3
-if ! command -v python3 >/dev/null 2>&1; then
-    echo "Python 3 is required but not found. Please install Python 3." >&2
+# Check for Python 3.8+
+PYTHON=${PYTHON:-python3}
+if ! command -v "$PYTHON" >/dev/null 2>&1; then
+    echo "Python 3.8+ is required but not found. Please install Python 3.8 or newer." >&2
+    exit 1
+fi
+
+# Verify that the Python version meets the minimum requirement
+if ! "$PYTHON" - <<'EOF'
+import sys
+sys.exit(0 if sys.version_info >= (3, 8) else 1)
+EOF
+then
+    echo "Python 3.8 or higher is required. Current version: $($PYTHON --version)" >&2
     exit 1
 fi
 
 # Create virtual environment if not present
 if [ ! -d "venv" ]; then
-    python3 -m venv venv
+    "$PYTHON" -m venv venv
 fi
 
 # Activate virtual environment
