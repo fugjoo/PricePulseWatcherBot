@@ -1,4 +1,3 @@
-import asyncio
 import os
 
 from dotenv import load_dotenv
@@ -51,16 +50,16 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     context.chat_data["price_job"] = job
 
 
-async def main() -> None:
+def main() -> None:
     load_dotenv()
     token = os.getenv("BOT_TOKEN")
     if not token:
         raise RuntimeError("BOT_TOKEN not set")
 
-    async with ApplicationBuilder().token(token).build() as app:
-        app.add_handler(CommandHandler("start", start))
-        await app.run_polling()
+    app = ApplicationBuilder().token(token).build()
+    app.add_handler(CommandHandler("start", start))
+    app.run_polling()
 
 
 if __name__ == "__main__":
-    asyncio.run(main())
+    main()
