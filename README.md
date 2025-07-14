@@ -4,8 +4,14 @@ Minimal async Telegram bot notifying when a coin hits a target price.
 
 ## Quickstart
 
+Ensure you have **Python 3.8 or newer** available:
+
 ```bash
-python -m venv venv
+python3 --version
+```
+
+```bash
+python3 -m venv venv
 source venv/bin/activate
 pip install -r requirements.txt
 cp .env.example .env  # edit variables
@@ -14,7 +20,9 @@ python run.py
 
 ### One-click install
 
-Simply run the provided script to set up everything at once:
+Simply run the provided script to set up everything at once. If Python 3.8+
+is not available, the script will attempt to install it via `apt`, `yum` or
+`dnf` (requires sudo privileges):
 
 ```bash
 ./install.sh
