@@ -654,9 +654,6 @@ async def unsubscribe_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
     logger.info(
         "chat %s unsubscribes via command from %s", update.effective_chat.id, coin
     )
-    await update.message.reply_text(
-        f"{SUCCESS_EMOJI} Unsubscribed from {symbol_for(coin)} alerts"
-    )
 
     await update.message.reply_text(
         f"{SUCCESS_EMOJI} Unsubscribed from {symbol_for(coin)} alerts",
