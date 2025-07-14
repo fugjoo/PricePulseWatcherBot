@@ -75,9 +75,10 @@ async def init_db() -> None:
             )
             """
         )
-        columns = {
-            row[1] for row in await db.execute("PRAGMA table_info(subscriptions)")
-        }
+        cursor = await db.execute("PRAGMA table_info(subscriptions)")
+        rows = await cursor.fetchall()
+        await cursor.close()
+        columns = {row[1] for row in rows}
         if "last_alert_ts" not in columns:
             await db.execute("ALTER TABLE subscriptions ADD COLUMN last_alert_ts REAL")
         await db.commit()
@@ -469,6 +470,10 @@ async def button(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
         else:
             text = "\n".join(f"{c.upper()} ±{t}%" for c, t in subs)
         await context.bot.send_message(chat_id=query.message.chat_id, text=text)
+
+
+        await query.edit_message_reply_markup(reply_markup=get_keyboard())
+
 
 
 async def menu(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
