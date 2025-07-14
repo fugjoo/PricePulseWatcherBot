@@ -3,3 +3,6 @@ python-telegram-bot[job-queue]
 aiohttp
 aiosqlite
 APScheduler
+pytest
+pytest-asyncio
+aresponses
