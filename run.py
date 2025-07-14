@@ -5,7 +5,6 @@ import signal
 import time
 from collections import defaultdict, deque
 from io import BytesIO
-from itertools import cycle
 from typing import Deque, Dict, Optional, Tuple
 
 import aiohttp
@@ -29,22 +28,24 @@ DB_FILE = "subs.db"
 DEFAULT_THRESHOLD = 3.0
 
 COINS = ["bitcoin", "ethereum", "litecoin", "dogecoin"]
-coin_cycle = cycle(COINS)
 
 
 async def fetch_trending_coins() -> None:
-    """Update COINS with trending data from CoinGecko."""
+    """Update COINS with the top trending coins from CoinGecko."""
     url = "https://api.coingecko.com/api/v3/search/trending"
-    async with aiohttp.ClientSession() as session:
-        async with session.get(url) as resp:
-            if resp.status != 200:
-                return
-            data = await resp.json()
-            coins = [c["item"]["id"] for c in data.get("coins", [])]
-            if coins:
-                global COINS, coin_cycle
-                COINS = coins
-                coin_cycle = cycle(COINS)
+    try:
+        async with aiohttp.ClientSession() as session:
+            async with session.get(url) as resp:
+                if resp.status != 200:
+                    logger.warning("trending request failed: %s", resp.status)
+                    return
+                data = await resp.json()
+                coins = [c["item"]["id"] for c in data.get("coins", [])][:10]
+                if coins:
+                    global COINS
+                    COINS = coins
+    except aiohttp.ClientError as exc:
+        logger.error("error fetching trending coins: %s", exc)
 
 
 logging.basicConfig(level=os.getenv("LOG_LEVEL", "INFO").upper())
@@ -107,7 +108,11 @@ async def get_price(
                 wait = max(0, LAST_REQUEST + 1.2 - time.time())
                 if wait:
                     await asyncio.sleep(wait)
-                resp = await session.get(url)
+                try:
+                    resp = await session.get(url)
+                except aiohttp.ClientError as exc:
+                    logger.error("price request failed: %s", exc)
+                    return None
                 LAST_REQUEST = time.time()
             if resp.status == 200:
                 data = await resp.json()
@@ -136,7 +141,11 @@ async def get_coin_info(
             wait = max(0, LAST_REQUEST + 1.2 - time.time())
             if wait:
                 await asyncio.sleep(wait)
-            resp = await session.get(url)
+            try:
+                resp = await session.get(url)
+            except aiohttp.ClientError as exc:
+                logger.error("coin info request failed: %s", exc)
+                return None
             LAST_REQUEST = time.time()
         if resp.status == 200:
             return await resp.json()
@@ -165,7 +174,11 @@ async def get_market_chart(
             wait = max(0, LAST_REQUEST + 1.2 - time.time())
             if wait:
                 await asyncio.sleep(wait)
-            resp = await session.get(url)
+            try:
+                resp = await session.get(url)
+            except aiohttp.ClientError as exc:
+                logger.error("chart request failed: %s", exc)
+                return None
             LAST_REQUEST = time.time()
         if resp.status == 200:
             data = await resp.json()
@@ -190,7 +203,11 @@ async def get_global_overview(
             wait = max(0, LAST_REQUEST + 1.2 - time.time())
             if wait:
                 await asyncio.sleep(wait)
-            resp = await session.get(url)
+            try:
+                resp = await session.get(url)
+            except aiohttp.ClientError as exc:
+                logger.error("global overview request failed: %s", exc)
+                return None
             LAST_REQUEST = time.time()
         if resp.status == 200:
             return await resp.json()
@@ -299,11 +316,18 @@ HELP_EMOJI = "\u2753"
 
 
 def get_keyboard() -> ReplyKeyboardMarkup:
-    coin = next(coin_cycle)
-    keyboard = [
-        [KeyboardButton(f"{SUB_EMOJI} Subscribe {coin.upper()}")],
-        [KeyboardButton(f"{LIST_EMOJI} List"), KeyboardButton(f"{HELP_EMOJI} Help")],
-    ]
+    rows = []
+    for i, coin in enumerate(COINS[:10]):
+        if i % 2 == 0:
+            rows.append([])
+        rows[-1].append(KeyboardButton(f"{SUB_EMOJI} Subscribe {coin.upper()}"))
+    rows.append(
+        [
+            KeyboardButton(f"{LIST_EMOJI} List"),
+            KeyboardButton(f"{HELP_EMOJI} Help"),
+        ]
+    )
+    keyboard = rows
     return ReplyKeyboardMarkup(
         keyboard,
         resize_keyboard=True,
@@ -394,7 +418,7 @@ async def info_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     price = market.get("current_price", {}).get("usd")
     cap = market.get("market_cap", {}).get("usd")
     change = market.get("price_change_percentage_24h")
-    text = f"{data.get('name')} ({data.get('symbol','').upper()})\n"
+    text = f"{data.get('name')} ({data.get('symbol', '').upper()})\n"
     if price is not None:
         text += f"Price: ${price:.2f}\n"
     if cap is not None:
@@ -470,10 +494,7 @@ async def button(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
         else:
             text = "\n".join(f"{c.upper()} ±{t}%" for c, t in subs)
         await context.bot.send_message(chat_id=query.message.chat_id, text=text)
-
-
         await query.edit_message_reply_markup(reply_markup=get_keyboard())
-
 
 
 async def menu(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
