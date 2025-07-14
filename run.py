@@ -588,7 +588,7 @@ async def check_prices(app) -> None:
                 await set_last_price(sub_id, price)
 
 
-SUB_EMOJI = "\U0001f514"
+SUB_EMOJI = "\U00002795"
 RELOAD_EMOJI = "\U000027f3"
 LIST_EMOJI = "\U0001f4cb"
 HELP_EMOJI = "\u2753"
@@ -601,7 +601,7 @@ ERROR_EMOJI = "\u26a0\ufe0f"
 def get_keyboard() -> ReplyKeyboardMarkup:
     coins_source = TOP_COINS or COINS or ["bitcoin"]
     coins = random.sample(coins_source, k=min(3, len(coins_source)))
-    subs = [KeyboardButton(f"{SUB_EMOJI} Subscribe {symbol_for(c)}") for c in coins]
+    subs = [KeyboardButton(f"{SUB_EMOJI} subscribe {symbol_for(c)}") for c in coins]
     keyboard = [
         subs,
         [KeyboardButton(RELOAD_EMOJI)],
