@@ -149,6 +149,8 @@ LAST_REQUEST = 0.0
 
 # cache last observed price to avoid zero when API fails
 LAST_KNOWN_PRICE: Dict[str, float] = {}
+# cache last global overview
+GLOBAL_CACHE: Optional[Tuple[dict, float]] = None
 
 # telegram rate limits
 user_messages: Dict[int, Deque[float]] = defaultdict(deque)
@@ -289,19 +291,21 @@ async def get_coin_info(
     if owns_session:
         session = aiohttp.ClientSession()
     try:
-        async with REQUEST_LOCK:
-            global LAST_REQUEST
-            wait = max(0, LAST_REQUEST + 1.2 - time.time())
-            if wait:
-                await asyncio.sleep(wait)
-            try:
-                resp = await session.get(url)
-            except aiohttp.ClientError as exc:
-                logger.error("coin info request failed: %s", exc)
-                return None
-            LAST_REQUEST = time.time()
-        if resp.status == 200:
-            return await resp.json()
+        for attempt in range(3):
+            async with REQUEST_LOCK:
+                global LAST_REQUEST
+                wait = max(0, LAST_REQUEST + 1.2 - time.time())
+                if wait:
+                    await asyncio.sleep(wait)
+                try:
+                    resp = await session.get(url)
+                except aiohttp.ClientError as exc:
+                    logger.error("coin info request failed: %s", exc)
+                    return None
+                LAST_REQUEST = time.time()
+            if resp.status == 200:
+                return await resp.json()
+            await asyncio.sleep(2**attempt)
     finally:
         if owns_session and session:
             await session.close()
@@ -351,23 +355,27 @@ async def get_global_overview(
     if owns_session:
         session = aiohttp.ClientSession()
     try:
-        async with REQUEST_LOCK:
-            global LAST_REQUEST
-            wait = max(0, LAST_REQUEST + 1.2 - time.time())
-            if wait:
-                await asyncio.sleep(wait)
-            try:
-                resp = await session.get(url)
-            except aiohttp.ClientError as exc:
-                logger.error("global overview request failed: %s", exc)
-                return None
-            LAST_REQUEST = time.time()
-        if resp.status == 200:
-            return await resp.json()
+        for attempt in range(3):
+            async with REQUEST_LOCK:
+                global LAST_REQUEST, GLOBAL_CACHE
+                wait = max(0, LAST_REQUEST + 1.2 - time.time())
+                if wait:
+                    await asyncio.sleep(wait)
+                try:
+                    resp = await session.get(url)
+                except aiohttp.ClientError as exc:
+                    logger.error("global overview request failed: %s", exc)
+                    break
+                LAST_REQUEST = time.time()
+            if resp.status == 200:
+                data = await resp.json()
+                GLOBAL_CACHE = (data, time.time())
+                return data
+            await asyncio.sleep(2**attempt)
     finally:
         if owns_session and session:
             await session.close()
-    return None
+    return GLOBAL_CACHE[0] if GLOBAL_CACHE else None
 
 
 async def subscribe_coin(
@@ -519,7 +527,6 @@ async def check_prices(app) -> None:
                     await send_rate_limited(
                         app.bot, chat_id, msg, emoji=f"{DOWN_ARROW} {BOMB}"
                     )
-
 
             MILESTONE_CACHE[(chat_id, coin)] = price
 
@@ -712,7 +719,7 @@ async def chart_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     if not context.args:
         await update.message.reply_text(f"{ERROR_EMOJI} Usage: /chart <coin> [days]")
         return
-    coin = context.args[0].lower()
+    coin = normalize_coin(context.args[0])
     days = 7
     if len(context.args) > 1:
         try:
@@ -739,7 +746,7 @@ async def chart_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
 async def global_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     """Display global market statistics."""
     data = await get_global_overview()
-    if not data:
+    if data is None:
         await update.message.reply_text(f"{ERROR_EMOJI} Failed to fetch data")
         return
     info = data.get("data", {})
