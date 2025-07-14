@@ -20,6 +20,9 @@ cp .env.example .env  # edit variables
 python run.py
 ```
 
+The bot uses Telegram's job queue. Ensure the `python-telegram-bot` package is
+installed with the `job-queue` extra as specified in `requirements.txt`.
+
 Start the bot and use `/start` in a chat with your bot. You can then subscribe
 to coin alerts with:
 
