@@ -1,0 +1,4 @@
+{
+  "default_threshold": 0.1,
+  "default_interval": "60s"
+}

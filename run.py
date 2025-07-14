@@ -1,7 +1,9 @@
 import asyncio
+import json
 import logging
 import os
 import random
+import re
 import signal
 import time
 from collections import defaultdict, deque
@@ -14,9 +16,17 @@ import matplotlib
 from apscheduler.schedulers.asyncio import AsyncIOScheduler
 from dotenv import load_dotenv
 from matplotlib import pyplot as plt
-from telegram import Bot, KeyboardButton, ReplyKeyboardMarkup, Update
+from telegram import (
+    Bot,
+    InlineKeyboardButton,
+    InlineKeyboardMarkup,
+    KeyboardButton,
+    ReplyKeyboardMarkup,
+    Update,
+)
 from telegram.ext import (
     ApplicationBuilder,
+    CallbackQueryHandler,
     CommandHandler,
     ContextTypes,
     MessageHandler,
@@ -28,6 +38,43 @@ matplotlib.use("Agg")
 DB_FILE = "subs.db"
 DEFAULT_THRESHOLD = 0.1
 DEFAULT_INTERVAL = 60
+
+
+def parse_duration(value: str) -> int:
+    """Return seconds for a duration string like '15m' or '1h'."""
+    if value.isdigit():
+        return int(value)
+    match = re.fullmatch(r"(\d+)([dhms])", value.lower())
+    if not match:
+        raise ValueError("invalid interval format")
+    num, unit = match.groups()
+    factor = {"d": 86400, "h": 3600, "m": 60, "s": 1}[unit]
+    return int(num) * factor
+
+
+def load_config(path: str = "config.json") -> None:
+    """Load defaults from a JSON config if present."""
+    if not os.path.isfile(path):
+        return
+    try:
+        with open(path) as fh:
+            data = json.load(fh)
+    except (OSError, json.JSONDecodeError) as exc:
+        logger.warning("failed to load config: %s", exc)
+        return
+
+    global DEFAULT_THRESHOLD, DEFAULT_INTERVAL
+    if "default_threshold" in data:
+        try:
+            DEFAULT_THRESHOLD = float(data["default_threshold"])
+        except (TypeError, ValueError):
+            logger.warning("invalid default_threshold in config")
+    if "default_interval" in data:
+        try:
+            DEFAULT_INTERVAL = parse_duration(str(data["default_interval"]))
+        except ValueError:
+            logger.warning("invalid default_interval in config")
+
 
 COINS = ["bitcoin", "ethereum", "litecoin", "dogecoin"]
 COIN_SYMBOLS: Dict[str, str] = {
@@ -466,9 +513,10 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
 
 async def help_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     await update.message.reply_text(
-        "/subscribe <coin> [pct] [seconds] - subscribe to price alerts\n"
+        "/subscribe <coin> [pct] [interval] - subscribe to price alerts\n"
         "/unsubscribe <coin> - remove subscription\n"
-        "/list - list subscriptions",
+        "/list - list subscriptions\n"
+        "Intervals can be given like 1h, 15m or 30s",
         reply_markup=get_keyboard(),
     )
 
@@ -476,7 +524,7 @@ async def help_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
 async def subscribe_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     if not context.args:
         await update.message.reply_text(
-            "Usage: /subscribe <coin> [pct] [seconds]", quote=True
+            "Usage: /subscribe <coin> [pct] [interval]", quote=True
         )
         return
     coin = normalize_coin(context.args[0])
@@ -489,9 +537,14 @@ async def subscribe_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE) -> N
         return
 
     try:
-        interval = int(context.args[2]) if len(context.args) > 2 else DEFAULT_INTERVAL
+        interval_str = (
+            context.args[2] if len(context.args) > 2 else str(DEFAULT_INTERVAL)
+        )
+        interval = parse_duration(interval_str)
     except ValueError:
-        await update.message.reply_text("Interval must be a number")
+        await update.message.reply_text(
+            "Interval must be a number or like 1h, 15m, 30s"
+        )
         return
 
     await subscribe_coin(update.effective_chat.id, coin, threshold, interval)
@@ -529,21 +582,27 @@ async def unsubscribe_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
 async def list_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     subs = await list_subscriptions(update.effective_chat.id)
     if not subs:
-        text = "No active subscriptions"
-    else:
-        lines = []
-        for _, coin, threshold, interval, last_price, last_ts in subs:
-            price = await get_price(coin) or 0
-            change = 0.0
-            if last_price:
-                change = (price - last_price) / last_price * 100
-            lines.append(
-                f"{symbol_for(coin)} ${price} {change:+.2f}% / ±{threshold}% "
-                f"every {interval}s"
-            )
-        text = "\n".join(lines)
+        await update.message.reply_text("No active subscriptions")
+        return
 
-    await update.message.reply_text(text)
+    for _, coin, threshold, interval, last_price, last_ts in subs:
+        price = await get_price(coin) or 0
+        change = 0.0
+        if last_price:
+            change = (price - last_price) / last_price * 100
+        text = (
+            f"{symbol_for(coin)} ${price} {change:+.2f}% / ±{threshold}% "
+            f"every {interval}s"
+        )
+        keyboard = InlineKeyboardMarkup(
+            [
+                [
+                    InlineKeyboardButton("Unsubscribe", callback_data=f"del:{coin}"),
+                    InlineKeyboardButton("Edit", callback_data=f"edit:{coin}"),
+                ]
+            ]
+        )
+        await update.message.reply_text(text, reply_markup=keyboard)
 
 
 async def info_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
@@ -639,6 +698,17 @@ async def button(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
             ),
         )
         await query.edit_message_reply_markup(reply_markup=get_keyboard())
+    elif query.data.startswith("del:"):
+        coin = query.data.split(":", 1)[1]
+        await unsubscribe_coin(query.message.chat_id, coin)
+        await query.edit_message_text(f"Unsubscribed from {symbol_for(coin)}")
+    elif query.data.startswith("edit:"):
+        coin = query.data.split(":", 1)[1]
+        await context.bot.send_message(
+            chat_id=query.message.chat_id,
+            text=f"Use /subscribe {coin} [pct] [interval] to update",
+        )
+        await query.edit_message_reply_markup(reply_markup=None)
     elif query.data == "list":
         subs = await list_subscriptions(query.message.chat_id)
         if not subs:
@@ -711,6 +781,7 @@ async def menu(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
 async def main() -> None:
     """Start the bot."""
     load_dotenv()
+    load_config()
     await init_db()
     await fetch_trending_coins()
 
@@ -729,6 +800,7 @@ async def main() -> None:
     app.add_handler(CommandHandler("chart", chart_cmd))
     app.add_handler(CommandHandler("global", global_cmd))
     app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, menu))
+    app.add_handler(CallbackQueryHandler(button))
 
     scheduler = AsyncIOScheduler()
     scheduler.add_job(check_prices, "interval", seconds=10, args=(app,))
