@@ -29,8 +29,8 @@ price check frequency. Start the bot and run `/start` in a chat with it.
 
 ### Commands
 
-- `/subscribe <coin> [pct] [interval]` – subscribe to price alerts
-- `/unsubscribe <coin>` – remove a subscription
+- `/add <coin> [pct] [interval]` – subscribe to price alerts
+- `/remove <coin>` – remove a subscription
 - `/list` – list active subscriptions
 - `/info <coin>` – show current coin data
 - `/chart <coin> [days]` – plot price history (alias `/charts`)
