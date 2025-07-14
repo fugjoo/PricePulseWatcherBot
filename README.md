@@ -1,55 +1,45 @@
-# Crypto Price Alert Bot
+# PricePulseWatcherBot
 
-Telegram bot that sends price alerts for your favourite cryptocurrency.
-Users can subscribe to coins and receive a message when the price changes more
-than a chosen percentage.
+Telegram bot that notifies you when a cryptocurrency moves by a chosen
+percentage. Create a `.env` from the example and keep your
+`TELEGRAM_TOKEN` secret. Talk to **@PricePulseWatcherBot** to get started.
 
-Create a `.env` file from the provided example and keep your
-`TELEGRAM_TOKEN` private.
+## Features
+
+- Subscribe to trending coins and get alerts
+- Inline button to refresh the suggested coin
+- Autocompletion for all bot commands
 
 ## Quickstart
 
-Ensure you have **Python 3.8 or newer** available:
-
-```bash
-python3 --version
-```
+Ensure **Python 3.8+** is available and install the requirements:
 
 ```bash
 python3 -m venv venv
 source venv/bin/activate
 pip install -r requirements.txt
-cp .env.example .env  # edit TELEGRAM_TOKEN
-cp config.json.example config.json  # optional defaults
+cp .env.example .env             # edit TELEGRAM_TOKEN
+cp config.json.example config.json
 python run.py
 ```
 
-Adjust values in `config.json` to change the default alert threshold, the
-default subscription interval or how often the bot queries the API.
+Adjust `config.json` to change the default threshold, subscription interval or
+price check frequency. Start the bot and run `/start` in a chat with it.
 
-The bot uses APScheduler to check prices every 60 seconds by default. Ensure the
-`python-telegram-bot` package is installed with the `job-queue` extra as
-specified in `requirements.txt`.
+### Commands
 
-Start the bot and use `/start` in a chat with your bot. You can then subscribe
-to coin alerts with:
+- `/subscribe <coin> [pct] [interval]` – subscribe to price alerts
+- `/unsubscribe <coin>` – remove a subscription
+- `/list` – list active subscriptions
+- `/info <coin>` – show current coin data
+- `/chart <coin> [days]` – plot price history
+- `/global` – show global market stats
 
-```bash
-/subscribe <coin> [percent] [interval]
-```
+Intervals accept plain seconds or values like `1h`, `15m` or `30s`.
 
-Intervals can be specified in seconds or with suffixes like `1h`, `15m` or `30s`.
+### One‑click install
 
-`price_check_interval` in `config.json` controls how often the bot polls the
-API for price updates.
-
-List active subscriptions with `/list` and remove them using `/unsubscribe <coin>`.
-
-### One-click install
-
-Simply run the provided script to set up everything at once. If Python 3.8+
-is not available, the script will attempt to install it via `apt`, `yum` or
-`dnf` (requires sudo privileges):
+Run the provided script to set up a virtual environment automatically:
 
 ```bash
 ./install.sh
@@ -64,4 +54,4 @@ docker run --env-file .env crypto-bot
 
 ## License
 
-This project is licensed under the [MIT License](LICENSE).
+Licensed under the [MIT License](LICENSE).
