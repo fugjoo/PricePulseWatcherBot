@@ -20,7 +20,9 @@ python run.py
 
 ### One-click install
 
-Simply run the provided script to set up everything at once:
+Simply run the provided script to set up everything at once. If Python 3.8+
+is not available, the script will attempt to install it via `apt` (requires
+sudo privileges):
 
 ```bash
 ./install.sh
