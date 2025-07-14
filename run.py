@@ -544,8 +544,8 @@ async def check_prices(app) -> None:
                 await set_last_price(sub_id, price)
 
 
-SUB_EMOJI = "\U0001fa99"
-RELOAD_EMOJI = "\U0001f504"
+SUB_EMOJI = "\U0001F514"
+RELOAD_EMOJI = "\U00027F3"
 LIST_EMOJI = "\U0001f4cb"
 HELP_EMOJI = "\u2753"
 WELCOME_EMOJI = "\U0001f44b"
