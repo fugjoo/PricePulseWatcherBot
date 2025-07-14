@@ -1,6 +1,7 @@
 import asyncio
 import os
 import signal
+from itertools import cycle
 from typing import Dict, Optional, Tuple
 
 import aiohttp
@@ -17,6 +18,9 @@ from telegram.ext import (
 
 DB_FILE = "subs.db"
 DEFAULT_THRESHOLD = 3.0
+
+COINS = ["bitcoin", "ethereum", "litecoin", "dogecoin"]
+coin_cycle = cycle(COINS)
 
 
 async def init_db() -> None:
@@ -123,17 +127,28 @@ async def check_prices(bot: Bot) -> None:
                 await set_last_price(sub_id, price)
 
 
-async def start(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
-    keyboard = InlineKeyboardMarkup(
+def get_keyboard() -> InlineKeyboardMarkup:
+    coin = next(coin_cycle)
+    return InlineKeyboardMarkup(
         [
-            [InlineKeyboardButton("🪙 Subscribe BTC", callback_data="sub:bitcoin")],
             [
-                InlineKeyboardButton("📋 List", callback_data="list"),
-                InlineKeyboardButton("❓ Help", callback_data="help"),
+                InlineKeyboardButton(
+                    f"\U0001fa99 Subscribe {coin.upper()}",
+                    callback_data=f"sub:{coin}",
+                )
+            ],
+            [
+                InlineKeyboardButton("\U0001f4cb List", callback_data="list"),
+                InlineKeyboardButton("\u2753 Help", callback_data="help"),
             ],
         ]
     )
-    await update.message.reply_text("Welcome! Choose an action:", reply_markup=keyboard)
+
+
+async def start(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    await update.message.reply_text(
+        "Welcome! Choose an action:", reply_markup=get_keyboard()
+    )
 
 
 async def help_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
@@ -187,9 +202,11 @@ async def button(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     if query.data.startswith("sub:"):
         coin = query.data.split(":", 1)[1]
         await subscribe_coin(query.message.chat_id, coin, DEFAULT_THRESHOLD)
-        await query.edit_message_text(
-            f"Subscribed to {coin.upper()} alerts at ±{DEFAULT_THRESHOLD}%"
+        await context.bot.send_message(
+            chat_id=query.message.chat_id,
+            text=f"Subscribed to {coin.upper()} alerts at ±{DEFAULT_THRESHOLD}%",
         )
+        await query.edit_message_reply_markup(reply_markup=get_keyboard())
     elif query.data == "list":
         subs = await list_subscriptions(query.message.chat_id)
         if not subs:
@@ -197,6 +214,7 @@ async def button(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
         else:
             text = "\n".join(f"{c.upper()} ±{t}%" for c, t in subs)
         await context.bot.send_message(chat_id=query.message.chat_id, text=text)
+        await query.edit_message_reply_markup(reply_markup=get_keyboard())
     elif query.data == "help":
         await context.bot.send_message(
             chat_id=query.message.chat_id,
@@ -206,6 +224,7 @@ async def button(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
                 "/list - list subscriptions"
             ),
         )
+        await query.edit_message_reply_markup(reply_markup=get_keyboard())
 
 
 async def main() -> None:
