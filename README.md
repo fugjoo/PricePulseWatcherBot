@@ -61,3 +61,7 @@ is not available, the script will attempt to install it via `apt`, `yum` or
 docker build -t crypto-bot .
 docker run --env-file .env crypto-bot
 ```
+
+## License
+
+This project is licensed under the [MIT License](LICENSE).
