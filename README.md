@@ -1,7 +1,8 @@
 # Crypto Price Alert Bot
 
-Simple Telegram bot that sends the current Bitcoin price every minute after the
-`/start` command.
+Telegram bot that sends price alerts for your favourite cryptocurrency.
+Users can subscribe to coins and receive a message when the price changes more
+than a chosen percentage.
 
 ## Quickstart
 
@@ -19,8 +20,15 @@ cp .env.example .env  # edit variables
 python run.py
 ```
 
-Once the bot is running, send `/start` in a chat with your bot to receive the
-current Bitcoin price every minute.
+Start the bot and use `/start` in a chat with your bot. You can then subscribe
+to coin alerts with:
+
+```bash
+/subscribe <coin> [percent]
+```
+
+List active subscriptions with `/list` and remove them using
+`/unsubscribe <coin>`.
 
 ### One-click install
 
