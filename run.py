@@ -5,8 +5,9 @@ from typing import Dict, Optional, Tuple
 
 import aiohttp
 import aiosqlite
+from apscheduler.schedulers.asyncio import AsyncIOScheduler
 from dotenv import load_dotenv
-from telegram import InlineKeyboardButton, InlineKeyboardMarkup, Update
+from telegram import Bot, InlineKeyboardButton, InlineKeyboardMarkup, Update
 from telegram.ext import (
     ApplicationBuilder,
     CallbackQueryHandler,
@@ -91,7 +92,7 @@ async def set_last_price(sub_id: int, price: float) -> None:
         await db.commit()
 
 
-async def check_prices(context: ContextTypes.DEFAULT_TYPE) -> None:
+async def check_prices(bot: Bot) -> None:
     """Periodic job that checks prices and notifies users."""
     async with aiosqlite.connect(DB_FILE) as db:
         cursor = await db.execute(
@@ -115,11 +116,9 @@ async def check_prices(context: ContextTypes.DEFAULT_TYPE) -> None:
                 continue
             change = abs((price - last_price) / last_price * 100)
             if change >= threshold:
-                await context.bot.send_message(
+                await bot.send_message(
                     chat_id=chat_id,
-                    text=(
-                        f"{coin.upper()} price changed {change:.2f}% to ${price:.2f}"
-                    ),
+                    text=f"{coin.upper()} price changed {change:.2f}% to ${price:.2f}",
                 )
                 await set_last_price(sub_id, price)
 
@@ -227,7 +226,9 @@ async def main() -> None:
     app.add_handler(CommandHandler("list", list_cmd))
     app.add_handler(CallbackQueryHandler(button))
 
-    app.job_queue.run_repeating(check_prices, interval=60, first=10)
+    scheduler = AsyncIOScheduler()
+    scheduler.add_job(check_prices, "interval", seconds=10, args=(app.bot,))
+    scheduler.start()
 
     await app.initialize()
     await app.start()
@@ -241,6 +242,7 @@ async def main() -> None:
     await app.updater.stop()
     await app.stop()
     await app.shutdown()
+    scheduler.shutdown()
 
 
 if __name__ == "__main__":
