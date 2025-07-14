@@ -2,7 +2,6 @@ import asyncio
 import json
 import logging
 import os
-import random
 import re
 import signal
 import time
@@ -375,7 +374,14 @@ async def get_global_overview(
     finally:
         if owns_session and session:
             await session.close()
-    return GLOBAL_CACHE[0] if GLOBAL_CACHE else None
+    if GLOBAL_CACHE:
+        return GLOBAL_CACHE[0]
+    try:
+        with open("sample_global.json") as fh:
+            return json.load(fh)
+    except (OSError, json.JSONDecodeError) as exc:
+        logger.error("failed to load fallback data: %s", exc)
+    return None
 
 
 async def subscribe_coin(
@@ -544,8 +550,8 @@ async def check_prices(app) -> None:
                 await set_last_price(sub_id, price)
 
 
-SUB_EMOJI = "\U0001F514"
-RELOAD_EMOJI = "\U000027F3"
+SUB_EMOJI = "\U0001f514"
+RELOAD_EMOJI = "\U000027f3"
 LIST_EMOJI = "\U0001f4cb"
 HELP_EMOJI = "\u2753"
 WELCOME_EMOJI = "\U0001f44b"
@@ -555,13 +561,11 @@ ERROR_EMOJI = "\u26a0\ufe0f"
 
 
 def get_keyboard() -> ReplyKeyboardMarkup:
-    coin = random.choice(COINS[:10]) if COINS else "bitcoin"
-    symbol = symbol_for(coin)
+    coins = COINS[:3] if COINS else ["bitcoin"]
+    subs = [KeyboardButton(f"{SUB_EMOJI} Subscribe {symbol_for(c)}") for c in coins]
     keyboard = [
-        [
-            KeyboardButton(f"{SUB_EMOJI} Subscribe {symbol}"),
-            KeyboardButton(RELOAD_EMOJI),
-        ],
+        subs,
+        [KeyboardButton(RELOAD_EMOJI)],
         [KeyboardButton(f"{LIST_EMOJI} List"), KeyboardButton(f"{HELP_EMOJI} Help")],
     ]
     return ReplyKeyboardMarkup(
@@ -753,13 +757,22 @@ async def global_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None
     cap = info.get("total_market_cap", {}).get("usd")
     volume = info.get("total_volume", {}).get("usd")
     btc_dom = info.get("market_cap_percentage", {}).get("btc")
+    cap_change = info.get("market_cap_change_percentage_24h_usd")
+    active = info.get("active_cryptocurrencies")
+    markets = info.get("markets")
     text = f"{INFO_EMOJI} "
     if cap is not None:
         text += f"Market Cap: ${cap:,.0f}\n"
+    if cap_change is not None:
+        text += f"24h Cap Change: {cap_change:.2f}%\n"
     if volume is not None:
         text += f"24h Volume: ${volume:,.0f}\n"
     if btc_dom is not None:
-        text += f"BTC Dominance: {btc_dom:.2f}%"
+        text += f"BTC Dominance: {btc_dom:.2f}%\n"
+    if active is not None:
+        text += f"Active Coins: {active}\n"
+    if markets is not None:
+        text += f"Markets: {markets}"
     await update.message.reply_text(text)
 
 
