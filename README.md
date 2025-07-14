@@ -19,6 +19,7 @@ python3 -m venv venv
 source venv/bin/activate
 pip install -r requirements.txt
 cp .env.example .env             # edit TELEGRAM_TOKEN
+# DB_PATH sets the SQLite file used (default subs.db)
 cp config.json.example config.json
 python run.py
 ```

@@ -36,7 +36,8 @@ from telegram.ext import (
 
 matplotlib.use("Agg")
 
-DB_FILE = "subs.db"
+load_dotenv()
+DB_FILE = os.getenv("DB_PATH", "subs.db")
 BOT_NAME = "PricePulseWatcherBot"
 DEFAULT_THRESHOLD = 0.1
 DEFAULT_INTERVAL = 60
