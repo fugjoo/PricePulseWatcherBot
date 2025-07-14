@@ -31,10 +31,6 @@ if ! command -v "$PYTHON" >/dev/null 2>&1; then
         echo "Please install Python 3.8 or newer and re-run this script." >&2
         exit 1
     fi
-
-    echo "Python 3.8+ is required but not found. Please install Python 3.8 or newer." >&2
-    exit 1
-
 fi
 
 # Verify that the Python version meets the minimum requirement

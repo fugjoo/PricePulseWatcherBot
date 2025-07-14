@@ -11,12 +11,13 @@ import aiohttp
 import aiosqlite
 from apscheduler.schedulers.asyncio import AsyncIOScheduler
 from dotenv import load_dotenv
-from telegram import Bot, InlineKeyboardButton, InlineKeyboardMarkup, Update
+from telegram import Bot, KeyboardButton, ReplyKeyboardMarkup, Update
 from telegram.ext import (
     ApplicationBuilder,
-    CallbackQueryHandler,
     CommandHandler,
     ContextTypes,
+    MessageHandler,
+    filters,
 )
 
 DB_FILE = "subs.db"
@@ -192,21 +193,21 @@ async def check_prices(app) -> None:
                 await set_last_price(sub_id, price)
 
 
-def get_keyboard() -> InlineKeyboardMarkup:
+SUB_EMOJI = "\U0001fa99"
+LIST_EMOJI = "\U0001f4cb"
+HELP_EMOJI = "\u2753"
+
+
+def get_keyboard() -> ReplyKeyboardMarkup:
     coin = next(coin_cycle)
-    return InlineKeyboardMarkup(
-        [
-            [
-                InlineKeyboardButton(
-                    f"\U0001fa99 Subscribe {coin.upper()}",
-                    callback_data=f"sub:{coin}",
-                )
-            ],
-            [
-                InlineKeyboardButton("\U0001f4cb List", callback_data="list"),
-                InlineKeyboardButton("\u2753 Help", callback_data="help"),
-            ],
-        ]
+    keyboard = [
+        [KeyboardButton(f"{SUB_EMOJI} Subscribe {coin.upper()}")],
+        [KeyboardButton(f"{LIST_EMOJI} List"), KeyboardButton(f"{HELP_EMOJI} Help")],
+    ]
+    return ReplyKeyboardMarkup(
+        keyboard,
+        resize_keyboard=True,
+        is_persistent=True,
     )
 
 
@@ -221,7 +222,8 @@ async def help_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     await update.message.reply_text(
         "/subscribe <coin> [pct] - subscribe to price alerts\n"
         "/unsubscribe <coin> - remove subscription\n"
-        "/list - list subscriptions"
+        "/list - list subscriptions",
+        reply_markup=get_keyboard(),
     )
 
 
@@ -246,7 +248,8 @@ async def subscribe_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE) -> N
         threshold,
     )
     await update.message.reply_text(
-        f"Subscribed to {coin.upper()} price alerts at ±{threshold}%"
+        f"Subscribed to {coin.upper()} price alerts at ±{threshold}%",
+        reply_markup=get_keyboard(),
     )
 
 
@@ -256,10 +259,17 @@ async def unsubscribe_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
         return
     coin = context.args[0].lower()
     await unsubscribe_coin(update.effective_chat.id, coin)
+
     logger.info(
         "chat %s unsubscribes via command from %s", update.effective_chat.id, coin
     )
     await update.message.reply_text(f"Unsubscribed from {coin.upper()} alerts")
+
+    await update.message.reply_text(
+        f"Unsubscribed from {coin.upper()} alerts",
+        reply_markup=get_keyboard(),
+    )
+
 
 
 async def list_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
@@ -268,6 +278,7 @@ async def list_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
         text = "No active subscriptions"
     else:
         text = "\n".join(f"{c.upper()} ±{t}%" for c, t in subs)
+
     await update.message.reply_text(text)
 
 
@@ -285,22 +296,39 @@ async def button(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
         await query.edit_message_reply_markup(reply_markup=get_keyboard())
     elif query.data == "list":
         subs = await list_subscriptions(query.message.chat_id)
+
+    await update.message.reply_text(text, reply_markup=get_keyboard())
+
+
+async def menu(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    if not update.message:
+        return
+    text = update.message.text.strip()
+
+    if text.startswith(SUB_EMOJI):
+        parts = text.split()
+        if len(parts) >= 3 and parts[1] == "Subscribe":
+            coin = parts[2].lower()
+            await subscribe_coin(update.effective_chat.id, coin, DEFAULT_THRESHOLD)
+            await update.message.reply_text(
+                f"Subscribed to {coin.upper()} alerts at ±{DEFAULT_THRESHOLD}%",
+                reply_markup=get_keyboard(),
+            )
+    elif text == f"{LIST_EMOJI} List":
+        subs = await list_subscriptions(update.effective_chat.id)
+
         if not subs:
-            text = "No active subscriptions"
+            msg = "No active subscriptions"
         else:
-            text = "\n".join(f"{c.upper()} ±{t}%" for c, t in subs)
-        await context.bot.send_message(chat_id=query.message.chat_id, text=text)
-        await query.edit_message_reply_markup(reply_markup=get_keyboard())
-    elif query.data == "help":
-        await context.bot.send_message(
-            chat_id=query.message.chat_id,
-            text=(
-                "/subscribe <coin> [pct] - subscribe to price alerts\n"
-                "/unsubscribe <coin> - remove subscription\n"
-                "/list - list subscriptions"
-            ),
+            msg = "\n".join(f"{c.upper()} ±{t}%" for c, t in subs)
+        await update.message.reply_text(msg, reply_markup=get_keyboard())
+    elif text == f"{HELP_EMOJI} Help":
+        await update.message.reply_text(
+            "/subscribe <coin> [pct] - subscribe to price alerts\n"
+            "/unsubscribe <coin> - remove subscription\n"
+            "/list - list subscriptions",
+            reply_markup=get_keyboard(),
         )
-        await query.edit_message_reply_markup(reply_markup=get_keyboard())
 
 
 async def main() -> None:
@@ -319,7 +347,7 @@ async def main() -> None:
     app.add_handler(CommandHandler("subscribe", subscribe_cmd))
     app.add_handler(CommandHandler("unsubscribe", unsubscribe_cmd))
     app.add_handler(CommandHandler("list", list_cmd))
-    app.add_handler(CallbackQueryHandler(button))
+    app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, menu))
 
     scheduler = AsyncIOScheduler()
     scheduler.add_job(check_prices, "interval", seconds=10, args=(app,))
