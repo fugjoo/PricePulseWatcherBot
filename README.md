@@ -5,7 +5,7 @@ Users can subscribe to coins and receive a message when the price changes more
 than a chosen percentage.
 
 Create a `.env` file from the provided example and keep your
-`TELEGRAM_TOKEN` and `OPENAI_API_KEY` private.
+`TELEGRAM_TOKEN` private.
 
 ## Quickstart
 
@@ -19,7 +19,7 @@ python3 --version
 python3 -m venv venv
 source venv/bin/activate
 pip install -r requirements.txt
-cp .env.example .env  # edit TELEGRAM_TOKEN and OPENAI_API_KEY
+cp .env.example .env  # edit TELEGRAM_TOKEN
 cp config.json.example config.json  # optional defaults
 python run.py
 ```
