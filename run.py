@@ -18,7 +18,15 @@ import matplotlib
 from apscheduler.schedulers.asyncio import AsyncIOScheduler
 from dotenv import load_dotenv
 from matplotlib import pyplot as plt
-from telegram import Bot, BotCommand, KeyboardButton, ReplyKeyboardMarkup, Update
+from telegram import (
+    Bot,
+    BotCommand,
+    InlineKeyboardButton,
+    InlineKeyboardMarkup,
+    KeyboardButton,
+    ReplyKeyboardMarkup,
+    Update,
+)
 from telegram.ext import (
     ApplicationBuilder,
     CallbackQueryHandler,
@@ -737,13 +745,31 @@ async def build_sub_list(chat_id: int) -> Optional[str]:
     return "\n".join(f"- {entry}" for entry in lines)
 
 
+async def build_list_keyboard(chat_id: int) -> Optional[InlineKeyboardMarkup]:
+    """Return inline buttons to remove each subscription."""
+    subs = await list_subscriptions(chat_id)
+    if not subs:
+        return None
+    buttons = [
+        [
+            InlineKeyboardButton(
+                f"Remove {symbol_for(coin)}",
+                callback_data=f"del:{coin}",
+            )
+        ]
+        for _, coin, *_ in subs
+    ]
+    return InlineKeyboardMarkup(buttons)
+
+
 async def list_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     """List all active subscriptions for the chat."""
     text = await build_sub_list(update.effective_chat.id)
     if text is None:
         await update.message.reply_text(f"{INFO_EMOJI} No active subscriptions")
         return
-    await update.message.reply_text(text, reply_markup=get_keyboard())
+    keyboard = await build_list_keyboard(update.effective_chat.id)
+    await update.message.reply_text(text, reply_markup=keyboard or get_keyboard())
 
 
 async def info_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
