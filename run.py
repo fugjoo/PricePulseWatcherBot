@@ -727,12 +727,10 @@ async def unsubscribe_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
     )
 
 
-async def build_sub_list(chat_id: int) -> Optional[str]:
-    """Return formatted subscription list for a chat."""
+async def build_sub_entries(chat_id: int) -> list[tuple[str, str]]:
+    """Return list of (coin, formatted text) for all subscriptions."""
     subs = await list_subscriptions(chat_id)
-    if not subs:
-        return None
-    lines: list[str] = []
+    entries: list[tuple[str, str]] = []
     for _, coin, threshold, interval, last_price, last_ts in subs:
         info = await get_market_info(coin) or {}
         price = info.get("current_price") or await get_price(coin) or 0
@@ -741,35 +739,21 @@ async def build_sub_list(chat_id: int) -> Optional[str]:
         if change_24h is not None:
             line += f" ({change_24h:+.2f}% 24h)"
         line += f" / ±{threshold}% every {interval}s"
-        lines.append(line)
-    return "\n".join(f"- {entry}" for entry in lines)
-
-
-async def build_list_keyboard(chat_id: int) -> Optional[InlineKeyboardMarkup]:
-    """Return inline buttons to remove each subscription."""
-    subs = await list_subscriptions(chat_id)
-    if not subs:
-        return None
-    buttons = [
-        [
-            InlineKeyboardButton(
-                f"Remove {symbol_for(coin)}",
-                callback_data=f"del:{coin}",
-            )
-        ]
-        for _, coin, *_ in subs
-    ]
-    return InlineKeyboardMarkup(buttons)
+        entries.append((coin, line))
+    return entries
 
 
 async def list_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     """List all active subscriptions for the chat."""
-    text = await build_sub_list(update.effective_chat.id)
-    if text is None:
+    entries = await build_sub_entries(update.effective_chat.id)
+    if not entries:
         await update.message.reply_text(f"{INFO_EMOJI} No active subscriptions")
         return
-    keyboard = await build_list_keyboard(update.effective_chat.id)
-    await update.message.reply_text(text, reply_markup=keyboard or get_keyboard())
+    for coin, text in entries:
+        keyboard = InlineKeyboardMarkup(
+            [[InlineKeyboardButton("Remove", callback_data=f"del:{coin}")]]
+        )
+        await update.message.reply_text(text, reply_markup=keyboard)
 
 
 async def info_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
@@ -892,13 +876,22 @@ async def button(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
         )
         await query.edit_message_reply_markup(reply_markup=None)
     elif query.data == "list":
-        text = await build_sub_list(query.message.chat_id)
-        if text is None:
-            text = f"{INFO_EMOJI} No active subscriptions"
-        await context.bot.send_message(
-            chat_id=query.message.chat_id,
-            text=text,
-        )
+        entries = await build_sub_entries(query.message.chat_id)
+        if not entries:
+            await context.bot.send_message(
+                chat_id=query.message.chat_id,
+                text=f"{INFO_EMOJI} No active subscriptions",
+            )
+        else:
+            for coin, text in entries:
+                keyboard = InlineKeyboardMarkup(
+                    [[InlineKeyboardButton("Remove", callback_data=f"del:{coin}")]]
+                )
+                await context.bot.send_message(
+                    chat_id=query.message.chat_id,
+                    text=text,
+                    reply_markup=keyboard,
+                )
         await query.edit_message_reply_markup(reply_markup=get_keyboard())
 
 
