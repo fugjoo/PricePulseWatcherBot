@@ -626,8 +626,8 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
 async def help_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     """Display usage information."""
     await update.message.reply_text(
-        f"{INFO_EMOJI} /subscribe <coin> [pct] [interval] - subscribe to price alerts\n"
-        "/unsubscribe <coin> - remove subscription\n"
+        f"{INFO_EMOJI} /add <coin> [pct] [interval] - subscribe to price alerts\n"
+        "/remove <coin> - remove subscription\n"
         "/list - list subscriptions\n"
         "/info <coin> - coin information\n"
         "/chart(s) <coin> [days] - price chart\n"
@@ -641,7 +641,7 @@ async def subscribe_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE) -> N
     """Subscribe the chat to a coin at a given threshold and interval."""
     if not context.args:
         await update.message.reply_text(
-            f"{ERROR_EMOJI} Usage: /subscribe <coin> [pct] [interval]",
+            f"{ERROR_EMOJI} Usage: /add <coin> [pct] [interval]",
             quote=True,
         )
         return
@@ -685,7 +685,7 @@ async def subscribe_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE) -> N
 async def unsubscribe_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     """Remove an existing subscription."""
     if not context.args:
-        await update.message.reply_text(f"{ERROR_EMOJI} Usage: /unsubscribe <coin>")
+        await update.message.reply_text(f"{ERROR_EMOJI} Usage: /remove <coin>")
         return
     coin = normalize_coin(context.args[0])
     await unsubscribe_coin(update.effective_chat.id, coin)
@@ -843,7 +843,7 @@ async def button(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
         coin = query.data.split(":", 1)[1]
         await context.bot.send_message(
             chat_id=query.message.chat_id,
-            text=f"{INFO_EMOJI} Use /subscribe {coin} [pct] [interval] to update",
+            text=f"{INFO_EMOJI} Use /add {coin} [pct] [interval] to update",
         )
         await query.edit_message_reply_markup(reply_markup=None)
     elif query.data == "list":
@@ -937,9 +937,9 @@ async def menu(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     elif text == f"{HELP_EMOJI} Help":
         await update.message.reply_text(
             (
-                f"{INFO_EMOJI} /subscribe <coin> [pct] [seconds] - subscribe to "
+                f"{INFO_EMOJI} /add <coin> [pct] [seconds] - subscribe to "
                 "price alerts\n"
-                "/unsubscribe <coin> - remove subscription\n"
+                "/remove <coin> - remove subscription\n"
                 "/list - list subscriptions"
             ),
             reply_markup=get_keyboard(),
@@ -962,8 +962,8 @@ async def main() -> None:
 
     app.add_handler(CommandHandler("start", start))
     app.add_handler(CommandHandler("help", help_cmd))
-    app.add_handler(CommandHandler("subscribe", subscribe_cmd))
-    app.add_handler(CommandHandler("unsubscribe", unsubscribe_cmd))
+    app.add_handler(CommandHandler("add", subscribe_cmd))
+    app.add_handler(CommandHandler("remove", unsubscribe_cmd))
     app.add_handler(CommandHandler("list", list_cmd))
     app.add_handler(CommandHandler("info", info_cmd))
     app.add_handler(CommandHandler("chart", chart_cmd))
@@ -984,8 +984,8 @@ async def main() -> None:
         [
             BotCommand("start", "Show menu"),
             BotCommand("help", "Show help"),
-            BotCommand("subscribe", "Subscribe to price alerts"),
-            BotCommand("unsubscribe", "Remove subscription"),
+            BotCommand("add", "Subscribe to price alerts"),
+            BotCommand("remove", "Remove subscription"),
             BotCommand("list", "List subscriptions"),
             BotCommand("info", "Coin information"),
             BotCommand("chart", "Price chart"),
