@@ -135,11 +135,10 @@ async def fetch_trending_coins() -> None:
 
 
 async def fetch_top_coins() -> None:
-    """Populate TOP_COINS with the 20 best performing coins (24h change)."""
+    """Populate TOP_COINS with the coins that have the highest market cap."""
     url = (
         "https://api.coingecko.com/api/v3/coins/markets"
         "?vs_currency=usd&order=market_cap_desc&per_page=50&page=1"
-        "&price_change_percentage=24h"
     )
     try:
         async with aiohttp.ClientSession() as session:
@@ -148,13 +147,8 @@ async def fetch_top_coins() -> None:
                     logger.warning("top coins request failed: %s", resp.status)
                     return
                 data = await resp.json()
-                sorted_data = sorted(
-                    data,
-                    key=lambda d: d.get("price_change_percentage_24h", 0),
-                    reverse=True,
-                )
                 coins: list[str] = []
-                for item in sorted_data[:20]:
+                for item in data[:20]:
                     coin_id = item.get("id")
                     symbol = item.get("symbol")
                     if coin_id:
@@ -624,7 +618,7 @@ ERROR_EMOJI = "\u26a0\ufe0f"
 
 
 def get_keyboard() -> ReplyKeyboardMarkup:
-    coins_source = TOP_COINS or COINS or ["bitcoin"]
+    coins_source = TOP_COINS[:20] if TOP_COINS else (COINS or ["bitcoin"])
     coins = random.sample(coins_source, k=min(3, len(coins_source)))
     subs = [KeyboardButton(f"{SUB_EMOJI} Add {symbol_for(c)}") for c in coins]
     keyboard = [
