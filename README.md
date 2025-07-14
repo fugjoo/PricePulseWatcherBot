@@ -1,6 +1,7 @@
 # Crypto Price Alert Bot
 
-Minimal async Telegram bot notifying when a coin hits a target price.
+Simple Telegram bot that sends the current Bitcoin price every minute after the
+`/start` command.
 
 ## Quickstart
 
@@ -17,6 +18,9 @@ pip install -r requirements.txt
 cp .env.example .env  # edit variables
 python run.py
 ```
+
+Once the bot is running, send `/start` in a chat with your bot to receive the
+current Bitcoin price every minute.
 
 ### One-click install
 
