@@ -1,4 +1,6 @@
 import os
+import asyncio
+import signal
 from typing import Optional, Dict, Tuple
 
 import aiohttp
@@ -191,8 +193,10 @@ async def button(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
 
 
 async def main() -> None:
+    """Start the bot."""
     load_dotenv()
     await init_db()
+
     token = os.getenv("BOT_TOKEN")
     if not token:
         raise RuntimeError("BOT_TOKEN not set")
@@ -211,7 +215,15 @@ async def main() -> None:
     await app.initialize()
     await app.start()
     await app.updater.start_polling()
-    await app.updater.idle()
+
+    stop_event = asyncio.Event()
+    for sig in (signal.SIGINT, signal.SIGTERM):
+        asyncio.get_running_loop().add_signal_handler(sig, stop_event.set)
+
+    await stop_event.wait()
+    await app.updater.stop()
+    await app.stop()
+    await app.shutdown()
 
 
 if __name__ == "__main__":
