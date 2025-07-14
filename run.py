@@ -44,8 +44,8 @@ DEFAULT_INTERVAL = 60
 PRICE_CHECK_INTERVAL = 60
 
 # emojis used for price movements
-UP_ARROW = "\U0001f53a"  # red up triangle
-DOWN_ARROW = "\U0001f53b"  # blue down triangle
+UP_ARROW = "\U0001f53a"  # up triangle
+DOWN_ARROW = "\U0001f53b"  # down triangle
 ROCKET = "\U0001f680"  # rocket for big gains
 BOMB = "\U0001f4a3"  # bomb for big drops
 DEFAULT_ALERT_EMOJI = ROCKET
@@ -510,12 +510,12 @@ async def check_prices(app) -> None:
                 symbol = symbol_for(coin)
                 if price > prev:
 
-                    msg = f"{symbol} blasts past ${level:.0f} " f"(now ${price})"
+                    msg = f"{symbol} breaks through ${level:.0f} " f"(now ${price})"
                     await send_rate_limited(
                         app.bot, chat_id, msg, emoji=f"{UP_ARROW} {ROCKET}"
                     )
                 else:
-                    msg = f"{symbol} dives below ${level:.0f} " f"(now ${price})"
+                    msg = f"{symbol} falls below ${level:.0f} " f"(now ${price})"
                     await send_rate_limited(
                         app.bot, chat_id, msg, emoji=f"{DOWN_ARROW} {BOMB}"
                     )
