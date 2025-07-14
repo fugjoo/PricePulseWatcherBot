@@ -489,10 +489,10 @@ async def check_prices(app) -> None:
             for level in milestones_crossed(prev, price):
                 symbol = symbol_for(coin)
                 if price > prev:
-                    msg = f"{symbol} blasts past ${level:.0f} " f"(now ${price})"
+                    msg = f"{symbol} breaks through ${level:.0f} " f"(now ${price})"
                     await send_rate_limited(app.bot, chat_id, msg, emoji=UP_EMOJI)
                 else:
-                    msg = f"{symbol} dives below ${level:.0f} " f"(now ${price})"
+                    msg = f"{symbol} falls below ${level:.0f} " f"(now ${price})"
                     await send_rate_limited(app.bot, chat_id, msg, emoji=DOWN_EMOJI)
 
             MILESTONE_CACHE[(chat_id, coin)] = price
