@@ -1,7 +1,7 @@
-import os
 import asyncio
+import os
 import signal
-from typing import Optional, Dict, Tuple
+from typing import Dict, Optional, Tuple
 
 import aiohttp
 import aiosqlite
@@ -38,8 +38,7 @@ async def init_db() -> None:
 async def get_price(coin: str) -> Optional[float]:
     """Return the current USD price for a coin from CoinGecko."""
     url = (
-        "https://api.coingecko.com/api/v3/simple/price"
-        f"?ids={coin}&vs_currencies=usd"
+        "https://api.coingecko.com/api/v3/simple/price" f"?ids={coin}&vs_currencies=usd"
     )
     async with aiohttp.ClientSession() as session:
         async with session.get(url) as resp:
@@ -128,12 +127,14 @@ async def check_prices(context: ContextTypes.DEFAULT_TYPE) -> None:
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     keyboard = InlineKeyboardMarkup(
         [
-            [InlineKeyboardButton("Subscribe BTC", callback_data="sub:bitcoin")]
+            [InlineKeyboardButton("🪙 Subscribe BTC", callback_data="sub:bitcoin")],
+            [
+                InlineKeyboardButton("📋 List", callback_data="list"),
+                InlineKeyboardButton("❓ Help", callback_data="help"),
+            ],
         ]
     )
-    await update.message.reply_text(
-        "Welcome! Use /subscribe <coin> <pct> to subscribe.", reply_markup=keyboard
-    )
+    await update.message.reply_text("Welcome! Choose an action:", reply_markup=keyboard)
 
 
 async def help_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
@@ -146,13 +147,13 @@ async def help_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
 
 async def subscribe_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     if not context.args:
-        await update.message.reply_text(
-            "Usage: /subscribe <coin> [pct]", quote=True
-        )
+        await update.message.reply_text("Usage: /subscribe <coin> [pct]", quote=True)
         return
     coin = context.args[0].lower()
     try:
-        threshold = float(context.args[1]) if len(context.args) > 1 else DEFAULT_THRESHOLD
+        threshold = (
+            float(context.args[1]) if len(context.args) > 1 else DEFAULT_THRESHOLD
+        )
     except ValueError:
         await update.message.reply_text("Threshold must be a number")
         return
@@ -189,6 +190,22 @@ async def button(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
         await subscribe_coin(query.message.chat_id, coin, DEFAULT_THRESHOLD)
         await query.edit_message_text(
             f"Subscribed to {coin.upper()} alerts at ±{DEFAULT_THRESHOLD}%"
+        )
+    elif query.data == "list":
+        subs = await list_subscriptions(query.message.chat_id)
+        if not subs:
+            text = "No active subscriptions"
+        else:
+            text = "\n".join(f"{c.upper()} ±{t}%" for c, t in subs)
+        await context.bot.send_message(chat_id=query.message.chat_id, text=text)
+    elif query.data == "help":
+        await context.bot.send_message(
+            chat_id=query.message.chat_id,
+            text=(
+                "/subscribe <coin> [pct] - subscribe to price alerts\n"
+                "/unsubscribe <coin> - remove subscription\n"
+                "/list - list subscriptions"
+            ),
         )
 
 
@@ -227,6 +244,4 @@ async def main() -> None:
 
 
 if __name__ == "__main__":
-    import asyncio
-
     asyncio.run(main())
