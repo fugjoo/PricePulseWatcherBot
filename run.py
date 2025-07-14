@@ -481,10 +481,10 @@ async def send_rate_limited(
 
     # wait if limits exceeded
     if len(user_q) >= 20:
-        wait = 60 - (now - user_q[0])
+        wait = max(0, 60 - (now - user_q[0]))  # clamp negative sleeps
         await asyncio.sleep(wait)
     if len(global_messages) >= 30:
-        wait = 1 - (now - global_messages[0])
+        wait = max(0, 1 - (now - global_messages[0]))  # clamp negative sleeps
         await asyncio.sleep(wait)
 
     await bot.send_message(chat_id=chat_id, text=f"{text} {emoji}")
