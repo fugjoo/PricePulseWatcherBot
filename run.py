@@ -30,10 +30,27 @@ DEFAULT_THRESHOLD = 0.1
 DEFAULT_INTERVAL = 60
 
 COINS = ["bitcoin", "ethereum", "litecoin", "dogecoin"]
+COIN_SYMBOLS: Dict[str, str] = {
+    "bitcoin": "BTC",
+    "ethereum": "ETH",
+    "litecoin": "LTC",
+    "dogecoin": "DOGE",
+}
+SYMBOL_TO_COIN: Dict[str, str] = {v.lower(): k for k, v in COIN_SYMBOLS.items()}
+
+
+def symbol_for(coin: str) -> str:
+    """Return the symbol for a coin ID."""
+    return COIN_SYMBOLS.get(coin, coin.upper())
+
+
+def normalize_coin(value: str) -> str:
+    """Return the coin ID for a given symbol or coin name."""
+    return SYMBOL_TO_COIN.get(value.lower(), value.lower())
 
 
 async def fetch_trending_coins() -> None:
-    """Update COINS with the top trending coins from CoinGecko."""
+    """Update COINS and symbol mappings using the trending list from CoinGecko."""
     url = "https://api.coingecko.com/api/v3/search/trending"
     try:
         async with aiohttp.ClientSession() as session:
@@ -42,7 +59,16 @@ async def fetch_trending_coins() -> None:
                     logger.warning("trending request failed: %s", resp.status)
                     return
                 data = await resp.json()
-                coins = [c["item"]["id"] for c in data.get("coins", [])][:10]
+                coins: list[str] = []
+                for c in data.get("coins", [])[:10]:
+                    item = c.get("item", {})
+                    coin_id = item.get("id")
+                    symbol = item.get("symbol")
+                    if coin_id:
+                        coins.append(coin_id)
+                        if symbol:
+                            COIN_SYMBOLS[coin_id] = symbol.upper()
+                            SYMBOL_TO_COIN[symbol.lower()] = coin_id
                 if coins:
                     global COINS
                     COINS = coins
@@ -266,13 +292,31 @@ async def subscribe_coin(
     chat_id: int, coin: str, threshold: float, interval: int
 ) -> None:
     async with aiosqlite.connect(DB_FILE) as db:
-        await db.execute(
-            """
-            INSERT INTO subscriptions (chat_id, coin_id, threshold, interval)
-            VALUES (?, ?, ?, ?)
-            """,
-            (chat_id, coin, threshold, interval),
+        cursor = await db.execute(
+            (
+                "SELECT id, threshold, interval "
+                "FROM subscriptions WHERE chat_id=? AND coin_id=?"
+            ),
+            (chat_id, coin),
         )
+        row = await cursor.fetchone()
+        await cursor.close()
+        if row:
+            sub_id, existing_th, existing_int = row
+            new_th = min(existing_th, threshold)
+            new_int = min(existing_int, interval)
+            await db.execute(
+                "UPDATE subscriptions SET threshold=?, interval=? WHERE id=?",
+                (new_th, new_int, sub_id),
+            )
+        else:
+            await db.execute(
+                """
+                INSERT INTO subscriptions (chat_id, coin_id, threshold, interval)
+                VALUES (?, ?, ?, ?)
+                """,
+                (chat_id, coin, threshold, interval),
+            )
         await db.commit()
     logger.info(
         "chat %s subscribed to %s at ±%s%% every %ss",
@@ -378,23 +422,18 @@ async def check_prices(app) -> None:
 
             prev = MILESTONE_CACHE.get((chat_id, coin), last_price)
             for level in milestones_crossed(prev, price):
+                symbol = symbol_for(coin)
                 if price > prev:
-                    msg = (
-                        f"{coin.upper()} breaks through ${level:.0f} "
-                        f"(now ${price:.2f})"
-                    )
+                    msg = f"{symbol} breaks through ${level:.0f} " f"(now ${price})"
                 else:
-                    msg = (
-                        f"{coin.upper()} falls below ${level:.0f} "
-                        f"(now ${price:.2f})"
-                    )
+                    msg = f"{symbol} falls below ${level:.0f} " f"(now ${price})"
                 await send_rate_limited(app.bot, chat_id, msg)
             MILESTONE_CACHE[(chat_id, coin)] = price
 
             if last_ts is None or time.time() - last_ts >= interval:
                 change = abs((price - last_price) / last_price * 100)
                 if change >= threshold:
-                    text = f"{coin.upper()} moved {change:.2f}% to ${price:.2f}"
+                    text = f"{symbol_for(coin)} moved {change:.2f}% to ${price}"
                     await send_rate_limited(app.bot, chat_id, text)
                 await set_last_price(sub_id, price)
 
@@ -406,8 +445,9 @@ HELP_EMOJI = "\u2753"
 
 def get_keyboard() -> ReplyKeyboardMarkup:
     coin = random.choice(COINS[:10]) if COINS else "bitcoin"
+    symbol = symbol_for(coin)
     keyboard = [
-        [KeyboardButton(f"{SUB_EMOJI} Subscribe {coin.upper()}")],
+        [KeyboardButton(f"{SUB_EMOJI} Subscribe {symbol}")],
         [KeyboardButton(f"{LIST_EMOJI} List"), KeyboardButton(f"{HELP_EMOJI} Help")],
     ]
     return ReplyKeyboardMarkup(
@@ -439,7 +479,7 @@ async def subscribe_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE) -> N
             "Usage: /subscribe <coin> [pct] [seconds]", quote=True
         )
         return
-    coin = context.args[0].lower()
+    coin = normalize_coin(context.args[0])
     try:
         threshold = (
             float(context.args[1]) if len(context.args) > 1 else DEFAULT_THRESHOLD
@@ -463,7 +503,7 @@ async def subscribe_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE) -> N
         interval,
     )
     await update.message.reply_text(
-        f"Subscribed to {coin.upper()} at ±{threshold}% every {interval}s",
+        f"Subscribed to {symbol_for(coin)} at ±{threshold}% every {interval}s",
         reply_markup=get_keyboard(),
     )
 
@@ -472,16 +512,16 @@ async def unsubscribe_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
     if not context.args:
         await update.message.reply_text("Usage: /unsubscribe <coin>")
         return
-    coin = context.args[0].lower()
+    coin = normalize_coin(context.args[0])
     await unsubscribe_coin(update.effective_chat.id, coin)
 
     logger.info(
         "chat %s unsubscribes via command from %s", update.effective_chat.id, coin
     )
-    await update.message.reply_text(f"Unsubscribed from {coin.upper()} alerts")
+    await update.message.reply_text(f"Unsubscribed from {symbol_for(coin)} alerts")
 
     await update.message.reply_text(
-        f"Unsubscribed from {coin.upper()} alerts",
+        f"Unsubscribed from {symbol_for(coin)} alerts",
         reply_markup=get_keyboard(),
     )
 
@@ -498,7 +538,7 @@ async def list_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
             if last_price:
                 change = (price - last_price) / last_price * 100
             lines.append(
-                f"{coin.upper()} ${price:.2f} {change:+.2f}% / ±{threshold}% "
+                f"{symbol_for(coin)} ${price} {change:+.2f}% / ±{threshold}% "
                 f"every {interval}s"
             )
         text = "\n".join(lines)
@@ -510,7 +550,7 @@ async def info_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     if not context.args:
         await update.message.reply_text("Usage: /info <coin>")
         return
-    coin = context.args[0].lower()
+    coin = normalize_coin(context.args[0])
     data = await get_coin_info(coin)
     if not data:
         await update.message.reply_text("Coin not found")
@@ -519,9 +559,12 @@ async def info_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     price = market.get("current_price", {}).get("usd")
     cap = market.get("market_cap", {}).get("usd")
     change = market.get("price_change_percentage_24h")
-    text = f"{data.get('name')} ({data.get('symbol', '').upper()})\n"
+    sym = data.get("symbol", "").upper()
+    COIN_SYMBOLS[coin] = sym
+    SYMBOL_TO_COIN[sym.lower()] = coin
+    text = f"{data.get('name')} ({sym})\n"
     if price is not None:
-        text += f"Price: ${price:.2f}\n"
+        text += f"Price: ${price}\n"
     if cap is not None:
         text += f"Market Cap: ${cap:,.0f}\n"
     if change is not None:
@@ -591,7 +634,7 @@ async def button(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
         await context.bot.send_message(
             chat_id=query.message.chat_id,
             text=(
-                f"Subscribed to {coin.upper()} at ±{DEFAULT_THRESHOLD}% "
+                f"Subscribed to {symbol_for(coin)} at ±{DEFAULT_THRESHOLD}% "
                 f"every {DEFAULT_INTERVAL}s"
             ),
         )
@@ -608,7 +651,7 @@ async def button(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
                 if last_price:
                     change = (price - last_price) / last_price * 100
                 lines.append(
-                    f"{coin.upper()} ${price:.2f} {change:+.2f}% / ±{threshold}% "
+                    f"{symbol_for(coin)} ${price} {change:+.2f}% / ±{threshold}% "
                     f"every {interval}s"
                 )
             text = "\n".join(lines)
@@ -624,7 +667,7 @@ async def menu(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     if text.startswith(SUB_EMOJI):
         parts = text.split()
         if len(parts) >= 3 and parts[1] == "Subscribe":
-            coin = parts[2].lower()
+            coin = normalize_coin(parts[2])
             await subscribe_coin(
                 update.effective_chat.id,
                 coin,
@@ -633,7 +676,7 @@ async def menu(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
             )
             await update.message.reply_text(
                 (
-                    f"Subscribed to {coin.upper()} at ±{DEFAULT_THRESHOLD}% "
+                    f"Subscribed to {symbol_for(coin)} at ±{DEFAULT_THRESHOLD}% "
                     f"every {DEFAULT_INTERVAL}s"
                 ),
                 reply_markup=get_keyboard(),
@@ -651,7 +694,7 @@ async def menu(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
                 if last_price:
                     change = (price - last_price) / last_price * 100
                 lines.append(
-                    f"{coin.upper()} ${price:.2f} {change:+.2f}% / ±{threshold}% "
+                    f"{symbol_for(coin)} ${price} {change:+.2f}% / ±{threshold}% "
                     f"every {interval}s"
                 )
             msg = "\n".join(lines)
