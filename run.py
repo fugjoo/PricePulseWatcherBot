@@ -909,7 +909,6 @@ async def main() -> None:
     app.add_handler(CommandHandler("list", list_cmd))
     app.add_handler(CommandHandler("info", info_cmd))
     app.add_handler(CommandHandler("chart", chart_cmd))
-    app.add_handler(CommandHandler("charts", chart_cmd))
     app.add_handler(CommandHandler("global", global_cmd))
     app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, menu))
     app.add_handler(CallbackQueryHandler(button))
@@ -931,7 +930,6 @@ async def main() -> None:
             BotCommand("list", "List subscriptions"),
             BotCommand("info", "Coin information"),
             BotCommand("chart", "Price chart"),
-            BotCommand("charts", "Price chart"),
             BotCommand("global", "Global market"),
         ]
     )
