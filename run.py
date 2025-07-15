@@ -19,12 +19,23 @@ import numpy as np
 from apscheduler.schedulers.asyncio import AsyncIOScheduler
 from dotenv import load_dotenv
 from matplotlib import pyplot as plt
-from telegram import (Bot, BotCommand, InlineKeyboardButton,
-                      InlineKeyboardMarkup, KeyboardButton,
-                      ReplyKeyboardMarkup, Update)
-from telegram.ext import (ApplicationBuilder, CallbackQueryHandler,
-                          CommandHandler, ContextTypes, MessageHandler,
-                          filters)
+from telegram import (
+    Bot,
+    BotCommand,
+    InlineKeyboardButton,
+    InlineKeyboardMarkup,
+    KeyboardButton,
+    ReplyKeyboardMarkup,
+    Update,
+)
+from telegram.ext import (
+    ApplicationBuilder,
+    CallbackQueryHandler,
+    CommandHandler,
+    ContextTypes,
+    MessageHandler,
+    filters,
+)
 
 matplotlib.use("Agg")
 
@@ -40,6 +51,11 @@ COINGECKO_API_KEY = os.getenv("COINGECKO_API_KEY")
 COINGECKO_HEADERS = (
     {"x-cg-pro-api-key": COINGECKO_API_KEY} if COINGECKO_API_KEY else None
 )
+
+# API provider selection
+API_PROVIDER = os.getenv("PRICE_API_PROVIDER", "coingecko").lower()
+CMC_API_KEY = os.getenv("COINMARKETCAP_API_KEY")
+CMC_HEADERS = {"X-CMC_PRO_API_KEY": CMC_API_KEY} if CMC_API_KEY else None
 
 # emojis used for price movements
 UP_ARROW = "\U0001f53a"  # up triangle
@@ -183,6 +199,35 @@ global_messages: Deque[float] = deque()
 
 # milestone cache: (chat_id, coin) -> last checked price
 MILESTONE_CACHE: Dict[Tuple[int, str], float] = {}
+
+
+async def api_get(
+    url: str,
+    session: Optional[aiohttp.ClientSession] = None,
+    headers: Optional[dict] = None,
+    user: Optional[int] = None,
+) -> Optional[aiohttp.ClientResponse]:
+    """Perform an HTTP GET request with logging and rate limiting."""
+    owns_session = session is None
+    if owns_session:
+        session = aiohttp.ClientSession()
+    try:
+        async with REQUEST_LOCK:
+            global LAST_REQUEST
+            wait = max(0, LAST_REQUEST + 1.2 - time.time())
+            if wait:
+                await asyncio.sleep(wait)
+            try:
+                resp = await session.get(url, headers=headers)
+            except aiohttp.ClientError as exc:
+                logger.error("api request failed: %s", exc)
+                return None
+            LAST_REQUEST = time.time()
+        logger.info("api_request user=%s url=%s status=%s", user, url, resp.status)
+        return resp
+    finally:
+        if owns_session and session:
+            await session.close()
 
 
 def milestone_step(price: float) -> float:
@@ -331,38 +376,52 @@ async def init_db() -> None:
 
 
 async def get_price(
-    coin: str, session: Optional[aiohttp.ClientSession] = None
+    coin: str,
+    session: Optional[aiohttp.ClientSession] = None,
+    *,
+    user: Optional[int] = None,
 ) -> Optional[float]:
-    """Return the current USD price for a coin from CoinGecko."""
+    """Return the current USD price for a coin."""
     now = time.time()
     cached = PRICE_CACHE.get(coin)
     if cached and now - cached[1] < 60:
         return cached[0]
 
-    url = (
-        "https://api.coingecko.com/api/v3/simple/price" f"?ids={coin}&vs_currencies=usd"
-    )
+    if API_PROVIDER == "coinmarketcap":
+        symbol = symbol_for(coin)
+        url = (
+            "https://pro-api.coinmarketcap.com/v1/cryptocurrency/quotes/latest"
+            f"?symbol={symbol}"
+        )
+        headers = CMC_HEADERS
+        key = symbol
+    else:
+        url = (
+            "https://api.coingecko.com/api/v3/simple/price"
+            f"?ids={coin}&vs_currencies=usd"
+        )
+        headers = COINGECKO_HEADERS
+        key = coin
+
     retries = 3
     owns_session = session is None
     if owns_session:
         session = aiohttp.ClientSession()
     try:
         for attempt in range(retries):
-            async with REQUEST_LOCK:
-                global LAST_REQUEST
-                wait = max(0, LAST_REQUEST + 1.2 - time.time())
-                if wait:
-                    await asyncio.sleep(wait)
-                try:
-                    resp = await session.get(url, headers=COINGECKO_HEADERS)
-                except aiohttp.ClientError as exc:
-                    logger.error("price request failed: %s", exc)
-                    return None
-                LAST_REQUEST = time.time()
+            resp = await api_get(url, session=session, headers=headers, user=user)
+            if not resp:
+                return None
             if resp.status == 200:
                 data = await resp.json()
-                if coin in data:
-                    price = float(data[coin]["usd"])
+                if API_PROVIDER == "coinmarketcap":
+                    info = data.get("data", {}).get(symbol, {})
+                    quote = info.get("quote", {}).get("USD", {})
+                    price = quote.get("price")
+                else:
+                    price = data.get(key, {}).get("usd")
+                if price is not None:
+                    price = float(price)
                     PRICE_CACHE[coin] = (price, time.time())
                     LAST_KNOWN_PRICE[coin] = price
                     return price
@@ -370,33 +429,55 @@ async def get_price(
     finally:
         if owns_session:
             await session.close()
-    # use last known price if available to avoid showing 0
     return LAST_KNOWN_PRICE.get(coin)
 
 
 async def get_coin_info(
-    coin: str, session: Optional[aiohttp.ClientSession] = None
+    coin: str,
+    session: Optional[aiohttp.ClientSession] = None,
+    *,
+    user: Optional[int] = None,
 ) -> tuple[Optional[dict], Optional[str]]:
-    """Return detailed coin info from CoinGecko."""
-    url = f"https://api.coingecko.com/api/v3/coins/{coin}"
+    """Return detailed coin info."""
+    if API_PROVIDER == "coinmarketcap":
+        symbol = symbol_for(coin)
+        url = (
+            "https://pro-api.coinmarketcap.com/v1/cryptocurrency/quotes/latest"
+            f"?symbol={symbol}"
+        )
+        headers = CMC_HEADERS
+    else:
+        url = f"https://api.coingecko.com/api/v3/coins/{coin}"
+        headers = COINGECKO_HEADERS
+
     owns_session = session is None
     if owns_session:
         session = aiohttp.ClientSession()
     try:
         for attempt in range(3):
-            async with REQUEST_LOCK:
-                global LAST_REQUEST
-                wait = max(0, LAST_REQUEST + 1.2 - time.time())
-                if wait:
-                    await asyncio.sleep(wait)
-                try:
-                    resp = await session.get(url, headers=COINGECKO_HEADERS)
-                except aiohttp.ClientError as exc:
-                    logger.error("coin info request failed: %s", exc)
-                    return None, f"request failed: {exc}"
-                LAST_REQUEST = time.time()
+            resp = await api_get(url, session=session, headers=headers, user=user)
+            if not resp:
+                return None, "request failed"
             if resp.status == 200:
-                return await resp.json(), None
+                data = await resp.json()
+                if API_PROVIDER == "coinmarketcap":
+                    info = data.get("data", {}).get(symbol, {})
+                    quote = info.get("quote", {}).get("USD", {})
+                    return (
+                        {
+                            "name": info.get("name"),
+                            "symbol": info.get("symbol"),
+                            "market_data": {
+                                "current_price": {"usd": quote.get("price")},
+                                "market_cap": {"usd": quote.get("market_cap")},
+                                "price_change_percentage_24h": quote.get(
+                                    "percent_change_24h"
+                                ),
+                            },
+                        },
+                        None,
+                    )
+                return data, None
             if resp.status == 404:
                 return None, "coin not found"
             await asyncio.sleep(2**attempt)
@@ -411,6 +492,8 @@ async def fetch_ohlcv(
     interval: str,
     limit: int,
     session: Optional[aiohttp.ClientSession] = None,
+    *,
+    user: Optional[int] = None,
 ) -> tuple[Optional[list[dict]], Optional[str]]:
     """Return OHLCV candles from Binance."""
 
@@ -422,17 +505,9 @@ async def fetch_ohlcv(
     if owns_session:
         session = aiohttp.ClientSession()
     try:
-        async with REQUEST_LOCK:
-            global LAST_REQUEST
-            wait = max(0, LAST_REQUEST + 1.2 - time.time())
-            if wait:
-                await asyncio.sleep(wait)
-            try:
-                resp = await session.get(url, headers=COINGECKO_HEADERS)
-            except aiohttp.ClientError as exc:
-                logger.error("ohlcv request failed: %s", exc)
-                return None, f"request failed: {exc}"
-            LAST_REQUEST = time.time()
+        resp = await api_get(url, session=session, headers=COINGECKO_HEADERS, user=user)
+        if not resp:
+            return None, "request failed"
         if resp.status == 200:
             data = await resp.json()
             candles = [
@@ -454,30 +529,43 @@ async def fetch_ohlcv(
 
 
 async def get_market_info(
-    coin: str, session: Optional[aiohttp.ClientSession] = None
+    coin: str,
+    session: Optional[aiohttp.ClientSession] = None,
+    *,
+    user: Optional[int] = None,
 ) -> Optional[dict]:
     """Return basic market info for a coin."""
-    url = (
-        "https://api.coingecko.com/api/v3/coins/markets"
-        f"?vs_currency=usd&ids={coin}&price_change_percentage=24h"
-    )
+    if API_PROVIDER == "coinmarketcap":
+        symbol = symbol_for(coin)
+        url = (
+            "https://pro-api.coinmarketcap.com/v1/cryptocurrency/quotes/latest"
+            f"?symbol={symbol}"
+        )
+        headers = CMC_HEADERS
+    else:
+        url = (
+            "https://api.coingecko.com/api/v3/coins/markets"
+            f"?vs_currency=usd&ids={coin}&price_change_percentage=24h"
+        )
+        headers = COINGECKO_HEADERS
+
     owns_session = session is None
     if owns_session:
         session = aiohttp.ClientSession()
     try:
-        async with REQUEST_LOCK:
-            global LAST_REQUEST
-            wait = max(0, LAST_REQUEST + 1.2 - time.time())
-            if wait:
-                await asyncio.sleep(wait)
-            try:
-                resp = await session.get(url, headers=COINGECKO_HEADERS)
-            except aiohttp.ClientError as exc:
-                logger.error("market info request failed: %s", exc)
-                return None
-            LAST_REQUEST = time.time()
+        resp = await api_get(url, session=session, headers=headers, user=user)
+        if not resp:
+            return None
         if resp.status == 200:
             data = await resp.json()
+            if API_PROVIDER == "coinmarketcap":
+                info = data.get("data", {}).get(symbol, {})
+                quote = info.get("quote", {}).get("USD", {})
+                return {
+                    "current_price": quote.get("price"),
+                    "market_cap": quote.get("market_cap"),
+                    "price_change_percentage_24h": quote.get("percent_change_24h"),
+                }
             if data:
                 return data[0]
     finally:
@@ -492,27 +580,37 @@ async def get_market_chart(
     """Return historical price chart data for a coin."""
     end_ts = int(time.time())
     start_ts = end_ts - days * 86400
-    url = (
-        f"https://api.coingecko.com/api/v3/coins/{coin}/market_chart/range"
-        f"?vs_currency=usd&from={start_ts}&to={end_ts}"
-    )
+    if API_PROVIDER == "coinmarketcap":
+        symbol = symbol_for(coin)
+        url = (
+            "https://pro-api.coinmarketcap.com/v2/cryptocurrency/ohlcv/historical"
+            f"?symbol={symbol}&time_start={start_ts}&time_end={end_ts}"
+        )
+        headers = CMC_HEADERS
+    else:
+        url = (
+            f"https://api.coingecko.com/api/v3/coins/{coin}/market_chart/range"
+            f"?vs_currency=usd&from={start_ts}&to={end_ts}"
+        )
+        headers = COINGECKO_HEADERS
     owns_session = session is None
     if owns_session:
         session = aiohttp.ClientSession()
     try:
-        async with REQUEST_LOCK:
-            global LAST_REQUEST
-            wait = max(0, LAST_REQUEST + 1.2 - time.time())
-            if wait:
-                await asyncio.sleep(wait)
-            try:
-                resp = await session.get(url, headers=COINGECKO_HEADERS)
-            except aiohttp.ClientError as exc:
-                logger.error("chart request failed: %s", exc)
-                return None, f"request failed: {exc}"
-            LAST_REQUEST = time.time()
+        resp = await api_get(url, session=session, headers=headers)
+        if not resp:
+            return None, "request failed"
         if resp.status == 200:
             data = await resp.json()
+            if API_PROVIDER == "coinmarketcap":
+                quotes = data.get("data", {}).get("quotes", [])
+                return [
+                    (
+                        q.get("time_open", 0) / 1000,
+                        q.get("quote", {}).get("USD", {}).get("close"),
+                    )
+                    for q in quotes
+                ], None
             return [(p[0] / 1000, p[1]) for p in data.get("prices", [])], None
         if resp.status == 404:
             return None, "coin not found"
@@ -524,27 +622,44 @@ async def get_market_chart(
 
 async def get_global_overview(
     session: Optional[aiohttp.ClientSession] = None,
+    *,
+    user: Optional[int] = None,
 ) -> tuple[Optional[dict], Optional[str]]:
-    """Return global market data from CoinGecko."""
-    url = "https://api.coingecko.com/api/v3/global"
+    """Return global market data."""
+    if API_PROVIDER == "coinmarketcap":
+        url = "https://pro-api.coinmarketcap.com/v1/global-metrics/quotes/latest"
+        headers = CMC_HEADERS
+    else:
+        url = "https://api.coingecko.com/api/v3/global"
+        headers = COINGECKO_HEADERS
     owns_session = session is None
     if owns_session:
         session = aiohttp.ClientSession()
     try:
         for attempt in range(3):
-            async with REQUEST_LOCK:
-                global LAST_REQUEST
-                wait = max(0, LAST_REQUEST + 1.2 - time.time())
-                if wait:
-                    await asyncio.sleep(wait)
-                try:
-                    resp = await session.get(url, headers=COINGECKO_HEADERS)
-                except aiohttp.ClientError as exc:
-                    logger.error("global overview request failed: %s", exc)
-                    return None, f"request failed: {exc}"
-                LAST_REQUEST = time.time()
+            resp = await api_get(url, session=session, headers=headers, user=user)
+            if not resp:
+                return None, "request failed"
             if resp.status == 200:
                 data = await resp.json()
+                if API_PROVIDER == "coinmarketcap":
+                    quote = data.get("data", {}).get("quote", {}).get("USD", {})
+                    btc_dominance = data.get("data", {}).get("btc_dominance")
+                    return (
+                        {
+                            "data": {
+                                "total_market_cap": {
+                                    "usd": quote.get("total_market_cap")
+                                },
+                                "total_volume": {"usd": quote.get("total_volume_24h")},
+                                "market_cap_percentage": {"btc": btc_dominance},
+                                "market_cap_change_percentage_24h_usd": quote.get(
+                                    "percent_change_24h"
+                                ),
+                            }
+                        },
+                        None,
+                    )
                 return data, None
             await asyncio.sleep(2**attempt)
         return None, f"HTTP {resp.status}"
@@ -655,7 +770,7 @@ async def send_rate_limited(
         wait = max(0, 1 - (now - global_messages[0]))  # clamp negative sleeps
         await asyncio.sleep(wait)
 
-    await bot.send_message(chat_id=chat_id, text=f"{text} {emoji}")
+    await bot.send_message(chat_id=chat_id, text=f"{emoji} {text}")
     user_q.append(time.time())
     global_messages.append(time.time())
 
@@ -679,7 +794,7 @@ async def check_prices(app) -> None:
         )
 
     for coin, subscriptions in by_coin.items():
-        price = await get_price(coin)
+        price = await get_price(coin, user=None)
         if price is None:
             continue
         for sub_id, chat_id, threshold, interval, last_price, last_ts in subscriptions:
@@ -838,10 +953,14 @@ async def build_sub_entries(chat_id: int) -> list[tuple[str, str]]:
     subs = await list_subscriptions(chat_id)
     entries: list[tuple[str, str]] = []
     for _, coin, threshold, interval, *_ in subs:
-        info, _ = await get_coin_info(coin)
+        info, _ = await get_coin_info(coin, user=chat_id)
         info = info or {}
         market = info.get("market_data", {})
-        price = market.get("current_price", {}).get("usd") or await get_price(coin) or 0
+        price = (
+            market.get("current_price", {}).get("usd")
+            or await get_price(coin, user=chat_id)
+            or 0
+        )
         cap = market.get("market_cap", {}).get("usd")
         change_24h = market.get("price_change_percentage_24h")
         sym = info.get("symbol")
@@ -898,7 +1017,7 @@ async def info_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
         await update.message.reply_text(f"{ERROR_EMOJI} Usage: /info <coin>")
         return
     coin = normalize_coin(context.args[0])
-    data, err = await get_coin_info(coin)
+    data, err = await get_coin_info(coin, user=update.effective_chat.id)
     if err:
         await update.message.reply_text(f"{ERROR_EMOJI} {err}")
         return
@@ -935,7 +1054,7 @@ async def chart_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
         except ValueError:
             await update.message.reply_text(f"{ERROR_EMOJI} Days must be a number")
             return
-    data, err = await get_market_chart(coin, days)
+    data, err = await get_market_chart(coin, days, user=update.effective_chat.id)
     if err:
         await update.message.reply_text(f"{ERROR_EMOJI} {err}")
         return
@@ -956,7 +1075,7 @@ async def chart_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
 
 async def global_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     """Display global market statistics."""
-    data, err = await get_global_overview()
+    data, err = await get_global_overview(user=update.effective_chat.id)
     if err:
         await update.message.reply_text(f"{ERROR_EMOJI} {err}")
         return
@@ -995,7 +1114,12 @@ async def trends_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None
     lines = []
     async with aiohttp.ClientSession() as session:
         for coin in COINS:
-            info = await get_market_info(coin, session=session) or {}
+            info = (
+                await get_market_info(
+                    coin, session=session, user=update.effective_chat.id
+                )
+                or {}
+            )
             price = info.get("current_price")
             change_24h = info.get("price_change_percentage_24h")
             line = f"{symbol_for(coin)}"
@@ -1025,7 +1149,9 @@ async def valuearea_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE) -> N
         await update.message.reply_text(f"{ERROR_EMOJI} Count must be a number")
         return
 
-    candles, err = await fetch_ohlcv(symbol, interval, limit)
+    candles, err = await fetch_ohlcv(
+        symbol, interval, limit, user=update.effective_chat.id
+    )
     if err:
         await update.message.reply_text(f"{ERROR_EMOJI} {err}")
         return
