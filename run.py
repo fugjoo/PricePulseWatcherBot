@@ -45,7 +45,7 @@ DB_FILE = os.getenv("DB_PATH", "subs.db")
 BOT_NAME = "PricePulseWatcherBot"
 DEFAULT_THRESHOLD = 0.1
 DEFAULT_INTERVAL = 300
-PRICE_CHECK_INTERVAL = 30
+PRICE_CHECK_INTERVAL = 60
 
 # optional CoinGecko API key for higher rate limits
 COINGECKO_API_KEY = os.getenv("COINGECKO_API_KEY")
