@@ -731,14 +731,26 @@ async def build_sub_entries(chat_id: int) -> list[tuple[str, str]]:
     """Return list of (coin, formatted text) for all subscriptions."""
     subs = await list_subscriptions(chat_id)
     entries: list[tuple[str, str]] = []
-    for _, coin, threshold, interval, last_price, last_ts in subs:
-        info = await get_market_info(coin) or {}
-        price = info.get("current_price") or await get_price(coin) or 0
-        change_24h = info.get("price_change_percentage_24h")
-        line = f"{symbol_for(coin)} ${format_price(price)}"
+    for _, coin, threshold, interval, *_ in subs:
+        info = await get_coin_info(coin) or {}
+        market = info.get("market_data", {})
+        price = market.get("current_price", {}).get("usd") or await get_price(coin) or 0
+        cap = market.get("market_cap", {}).get("usd")
+        change_24h = market.get("price_change_percentage_24h")
+        sym = info.get("symbol")
+        if sym:
+            COIN_SYMBOLS[coin] = sym.upper()
+            SYMBOL_TO_COIN[sym.lower()] = coin
+        line = f"{INFO_EMOJI} {info.get('name', coin.title())}"
+        if sym:
+            line += f" ({sym.upper()})"
+        line += "\n"
+        line += f"Price: ${format_price(price)}\n"
+        if cap is not None:
+            line += f"Market Cap: ${cap:,.0f}\n"
         if change_24h is not None:
-            line += f" ({change_24h:+.2f}% 24h)"
-        line += f" / ±{threshold}% every {interval}s"
+            line += f"24h Change: {change_24h:.2f}%\n"
+        line += f"Alerts: ±{threshold}% every {interval}s"
         entries.append((coin, line))
     return entries
 
