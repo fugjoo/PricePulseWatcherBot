@@ -15,6 +15,7 @@ from typing import Deque, Dict, Optional, Tuple
 import aiohttp
 import aiosqlite
 import matplotlib
+import numpy as np
 from apscheduler.schedulers.asyncio import AsyncIOScheduler
 from dotenv import load_dotenv
 from matplotlib import pyplot as plt
@@ -235,6 +236,73 @@ def trend_emojis(change: float) -> str:
     return UP_ARROW if change >= 0 else DOWN_ARROW
 
 
+def calculate_volume_profile(candles: list[dict]) -> dict:
+    """Return volume profile metrics for the given candles.
+
+    Each candle should contain ``high``, ``low`` and ``volume`` keys. The
+    volume of a candle is distributed evenly across its price range and added
+    to one of 100 bins spanning the observed price range.
+    """
+
+    if not candles:
+        raise ValueError("no candles provided")
+
+    min_price = min(c["low"] for c in candles)
+    max_price = max(c["high"] for c in candles)
+    if min_price == max_price:
+        raise ValueError("candle prices are constant")
+
+    bins = 100
+    edges = np.linspace(min_price, max_price, bins + 1)
+    hist = np.zeros(bins)
+
+    for candle in candles:
+        low = candle["low"]
+        high = candle["high"]
+        vol = candle["volume"]
+        if high <= low:
+            idx = np.searchsorted(edges, high, side="right") - 1
+            if 0 <= idx < bins:
+                hist[idx] += vol
+            continue
+        start = np.searchsorted(edges, low, side="right") - 1
+        end = np.searchsorted(edges, high, side="left")
+        for idx in range(max(start, 0), min(end + 1, bins)):
+            left = edges[idx]
+            right = edges[idx + 1]
+            overlap_left = max(left, low)
+            overlap_right = min(right, high)
+            if overlap_left >= overlap_right:
+                continue
+            proportion = (overlap_right - overlap_left) / (high - low)
+            hist[idx] += vol * proportion
+
+    total_volume = float(hist.sum())
+    if total_volume == 0:
+        raise ValueError("no volume data")
+
+    poc_idx = int(hist.argmax())
+    poc = float((edges[poc_idx] + edges[poc_idx + 1]) / 2)
+
+    target = total_volume * 0.7
+    sorted_idx = np.argsort(hist)[::-1]
+    included = []
+    volume_acc = 0.0
+    for idx in sorted_idx:
+        included.append(idx)
+        volume_acc += hist[idx]
+        if volume_acc >= target:
+            break
+
+    low_idx = min(included)
+    high_idx = max(included)
+
+    val = float(edges[low_idx])
+    vah = float(edges[high_idx + 1])
+
+    return {"val": val, "poc": poc, "vah": vah}
+
+
 async def init_db() -> None:
     """Ensure the subscriptions table exists."""
     async with aiosqlite.connect(DB_FILE) as db:
@@ -337,6 +405,53 @@ async def get_coin_info(
             if resp.status == 404:
                 return None, "coin not found"
             await asyncio.sleep(2**attempt)
+        return None, f"HTTP {resp.status}"
+    finally:
+        if owns_session and session:
+            await session.close()
+
+
+async def fetch_ohlcv(
+    symbol: str,
+    interval: str,
+    limit: int,
+    session: Optional[aiohttp.ClientSession] = None,
+) -> tuple[Optional[list[dict]], Optional[str]]:
+    """Return OHLCV candles from Binance."""
+
+    url = (
+        "https://api.binance.com/api/v3/klines"
+        f"?symbol={symbol.upper()}&interval={interval}&limit={limit}"
+    )
+    owns_session = session is None
+    if owns_session:
+        session = aiohttp.ClientSession()
+    try:
+        async with REQUEST_LOCK:
+            global LAST_REQUEST
+            wait = max(0, LAST_REQUEST + 1.2 - time.time())
+            if wait:
+                await asyncio.sleep(wait)
+            try:
+                resp = await session.get(url)
+            except aiohttp.ClientError as exc:
+                logger.error("ohlcv request failed: %s", exc)
+                return None, f"request failed: {exc}"
+            LAST_REQUEST = time.time()
+        if resp.status == 200:
+            data = await resp.json()
+            candles = [
+                {
+                    "high": float(item[2]),
+                    "low": float(item[3]),
+                    "close": float(item[4]),
+                    "volume": float(item[5]),
+                }
+                for item in data
+            ]
+            return candles, None
+        if resp.status == 429:
+            return None, "rate limit exceeded"
         return None, f"HTTP {resp.status}"
     finally:
         if owns_session and session:
@@ -654,6 +769,7 @@ async def help_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
         "/chart(s) <coin> [days] - price chart\n"
         "/trends - show trending coins\n"
         "/global - global market stats\n"
+        "/valuearea <symbol> <interval> <count> - volume profile\n"
         "Intervals can be like 1h, 15m or 30s",
         reply_markup=get_keyboard(),
     )
@@ -897,6 +1013,46 @@ async def trends_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None
     await update.message.reply_text(text)
 
 
+async def valuearea_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    """Display VAL, POC and VAH for a trading pair."""
+
+    if len(context.args) < 3:
+        await update.message.reply_text(
+            f"{ERROR_EMOJI} Usage: /valuearea <symbol> <interval> <count>"
+        )
+        return
+
+    symbol = context.args[0].upper()
+    interval = context.args[1]
+    try:
+        limit = int(context.args[2])
+    except ValueError:
+        await update.message.reply_text(f"{ERROR_EMOJI} Count must be a number")
+        return
+
+    candles, err = await fetch_ohlcv(symbol, interval, limit)
+    if err:
+        await update.message.reply_text(f"{ERROR_EMOJI} {err}")
+        return
+    if not candles:
+        await update.message.reply_text(f"{ERROR_EMOJI} No data available")
+        return
+
+    try:
+        profile = calculate_volume_profile(candles)
+    except ValueError as exc:
+        await update.message.reply_text(f"{ERROR_EMOJI} {exc}")
+        return
+
+    text = (
+        f"\U0001f4ca Value Area {symbol} ({interval}, {limit} candles):\n"
+        f"- VAL: ${format_price(profile['val'])}\n"
+        f"- POC: ${format_price(profile['poc'])}\n"
+        f"- VAH: ${format_price(profile['vah'])}"
+    )
+    await update.message.reply_text(text)
+
+
 async def button(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     """Handle inline keyboard button callbacks."""
     query = update.callback_query
@@ -1005,6 +1161,7 @@ async def main() -> None:
     app.add_handler(CommandHandler("chart", chart_cmd))
     app.add_handler(CommandHandler("trends", trends_cmd))
     app.add_handler(CommandHandler("global", global_cmd))
+    app.add_handler(CommandHandler("valuearea", valuearea_cmd))
     app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, menu))
     app.add_handler(CallbackQueryHandler(button))
 
@@ -1028,6 +1185,7 @@ async def main() -> None:
             BotCommand("chart", "Price chart"),
             BotCommand("trends", "Trending coins"),
             BotCommand("global", "Global market"),
+            BotCommand("valuearea", "Volume profile"),
         ]
     )
     await app.start()
