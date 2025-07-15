@@ -180,8 +180,6 @@ LAST_REQUEST = 0.0
 
 # cache last observed price to avoid zero when API fails
 LAST_KNOWN_PRICE: Dict[str, float] = {}
-# cache last global overview
-GLOBAL_CACHE: Optional[Tuple[dict, float]] = None
 
 # telegram rate limits
 user_messages: Dict[int, Deque[float]] = defaultdict(deque)
@@ -315,7 +313,7 @@ async def get_price(
 
 async def get_coin_info(
     coin: str, session: Optional[aiohttp.ClientSession] = None
-) -> Optional[dict]:
+) -> tuple[Optional[dict], Optional[str]]:
     """Return detailed coin info from CoinGecko."""
     url = f"https://api.coingecko.com/api/v3/coins/{coin}"
     owns_session = session is None
@@ -332,15 +330,17 @@ async def get_coin_info(
                     resp = await session.get(url)
                 except aiohttp.ClientError as exc:
                     logger.error("coin info request failed: %s", exc)
-                    return None
+                    return None, f"request failed: {exc}"
                 LAST_REQUEST = time.time()
             if resp.status == 200:
-                return await resp.json()
+                return await resp.json(), None
+            if resp.status == 404:
+                return None, "coin not found"
             await asyncio.sleep(2**attempt)
+        return None, f"HTTP {resp.status}"
     finally:
         if owns_session and session:
             await session.close()
-    return None
 
 
 async def get_market_info(
@@ -378,7 +378,7 @@ async def get_market_info(
 
 async def get_market_chart(
     coin: str, days: int, session: Optional[aiohttp.ClientSession] = None
-) -> Optional[list[tuple[float, float]]]:
+) -> tuple[Optional[list[tuple[float, float]]], Optional[str]]:
     """Return historical price chart data for a coin."""
     end_ts = int(time.time())
     start_ts = end_ts - days * 86400
@@ -399,20 +399,22 @@ async def get_market_chart(
                 resp = await session.get(url)
             except aiohttp.ClientError as exc:
                 logger.error("chart request failed: %s", exc)
-                return None
+                return None, f"request failed: {exc}"
             LAST_REQUEST = time.time()
         if resp.status == 200:
             data = await resp.json()
-            return [(p[0] / 1000, p[1]) for p in data.get("prices", [])]
+            return [(p[0] / 1000, p[1]) for p in data.get("prices", [])], None
+        if resp.status == 404:
+            return None, "coin not found"
+        return None, f"HTTP {resp.status}"
     finally:
         if owns_session and session:
             await session.close()
-    return None
 
 
 async def get_global_overview(
     session: Optional[aiohttp.ClientSession] = None,
-) -> Optional[dict]:
+) -> tuple[Optional[dict], Optional[str]]:
     """Return global market data from CoinGecko."""
     url = "https://api.coingecko.com/api/v3/global"
     owns_session = session is None
@@ -421,7 +423,7 @@ async def get_global_overview(
     try:
         for attempt in range(3):
             async with REQUEST_LOCK:
-                global LAST_REQUEST, GLOBAL_CACHE
+                global LAST_REQUEST
                 wait = max(0, LAST_REQUEST + 1.2 - time.time())
                 if wait:
                     await asyncio.sleep(wait)
@@ -429,24 +431,16 @@ async def get_global_overview(
                     resp = await session.get(url)
                 except aiohttp.ClientError as exc:
                     logger.error("global overview request failed: %s", exc)
-                    break
+                    return None, f"request failed: {exc}"
                 LAST_REQUEST = time.time()
             if resp.status == 200:
                 data = await resp.json()
-                GLOBAL_CACHE = (data, time.time())
-                return data
+                return data, None
             await asyncio.sleep(2**attempt)
+        return None, f"HTTP {resp.status}"
     finally:
         if owns_session and session:
             await session.close()
-    if GLOBAL_CACHE:
-        return GLOBAL_CACHE[0]
-    try:
-        with open("sample_global.json") as fh:
-            return json.load(fh)
-    except (OSError, json.JSONDecodeError) as exc:
-        logger.error("failed to load fallback data: %s", exc)
-    return None
 
 
 async def subscribe_coin(
@@ -733,7 +727,8 @@ async def build_sub_entries(chat_id: int) -> list[tuple[str, str]]:
     subs = await list_subscriptions(chat_id)
     entries: list[tuple[str, str]] = []
     for _, coin, threshold, interval, *_ in subs:
-        info = await get_coin_info(coin) or {}
+        info, _ = await get_coin_info(coin)
+        info = info or {}
         market = info.get("market_data", {})
         price = market.get("current_price", {}).get("usd") or await get_price(coin) or 0
         cap = market.get("market_cap", {}).get("usd")
@@ -792,9 +787,12 @@ async def info_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
         await update.message.reply_text(f"{ERROR_EMOJI} Usage: /info <coin>")
         return
     coin = normalize_coin(context.args[0])
-    data = await get_coin_info(coin)
+    data, err = await get_coin_info(coin)
+    if err:
+        await update.message.reply_text(f"{ERROR_EMOJI} {err}")
+        return
     if not data:
-        await update.message.reply_text(f"{ERROR_EMOJI} Coin not found")
+        await update.message.reply_text(f"{ERROR_EMOJI} No data available")
         return
     market = data.get("market_data", {})
     price = market.get("current_price", {}).get("usd")
@@ -826,7 +824,10 @@ async def chart_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
         except ValueError:
             await update.message.reply_text(f"{ERROR_EMOJI} Days must be a number")
             return
-    data = await get_market_chart(coin, days)
+    data, err = await get_market_chart(coin, days)
+    if err:
+        await update.message.reply_text(f"{ERROR_EMOJI} {err}")
+        return
     if not data:
         await update.message.reply_text(f"{ERROR_EMOJI} No data available")
         return
@@ -844,7 +845,10 @@ async def chart_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
 
 async def global_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     """Display global market statistics."""
-    data = await get_global_overview()
+    data, err = await get_global_overview()
+    if err:
+        await update.message.reply_text(f"{ERROR_EMOJI} {err}")
+        return
     if data is None:
         await update.message.reply_text(f"{ERROR_EMOJI} Failed to fetch data")
         return
