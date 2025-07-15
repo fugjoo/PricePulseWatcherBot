@@ -976,7 +976,7 @@ async def subscribe_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE) -> N
         msg = f"{ERROR_EMOJI} Unknown coin"
         if suggestions:
             syms = ", ".join(symbol_for(c) for c in suggestions)
-            msg += f". Meintest du: {syms}?"
+            msg += f". Did you mean {syms}?"
         await update.message.reply_text(msg)
         return
     try:
