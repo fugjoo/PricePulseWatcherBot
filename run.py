@@ -78,6 +78,17 @@ def parse_duration(value: str) -> int:
     return int(num) * factor
 
 
+def format_interval(seconds: int) -> str:
+    """Return a short string representation for a duration in seconds."""
+    if seconds % 86400 == 0:
+        return f"{seconds // 86400}d"
+    if seconds % 3600 == 0:
+        return f"{seconds // 3600}h"
+    if seconds % 60 == 0:
+        return f"{seconds // 60}m"
+    return f"{seconds}s"
+
+
 def load_config(path: str = "config.json") -> None:
     """Load defaults from a JSON config if present."""
     if not os.path.isfile(path):
@@ -896,7 +907,10 @@ async def check_prices(app) -> None:
                 if change >= threshold:
 
                     symbol = symbol_for(coin)
-                    text = f"{symbol} moved {raw_change:+.2f}% to ${price}"
+                    text = (
+                        f"{symbol} moved {raw_change:+.2f}% in "
+                        f"{format_interval(interval)} (now ${price})"
+                    )
                     await send_rate_limited(
                         app.bot, chat_id, text, emoji=trend_emojis(raw_change)
                     )
@@ -1009,7 +1023,7 @@ async def subscribe_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE) -> N
     await update.message.reply_text(
         (
             f"{SUCCESS_EMOJI} Subscribed to {symbol_for(coin)} at ±{threshold}% "
-            f"every {interval}s"
+            f"every {format_interval(interval)}"
         ),
         reply_markup=get_keyboard(),
     )
@@ -1061,7 +1075,7 @@ async def build_sub_entries(chat_id: int) -> list[tuple[str, str]]:
             line += f"Market Cap: ${cap:,.0f}\n"
         if change_24h is not None:
             line += f"24h Change: {change_24h:.2f}%\n"
-        line += f"Alerts: ±{threshold}% every {interval}s"
+        line += f"Alerts: ±{threshold}% every {format_interval(interval)}"
         entries.append((coin, line))
     return entries
 
@@ -1276,7 +1290,7 @@ async def button(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
             chat_id=query.message.chat_id,
             text=(
                 f"{SUCCESS_EMOJI} Subscribed to {symbol_for(coin)} at "
-                f"±{DEFAULT_THRESHOLD}% every {DEFAULT_INTERVAL}s"
+                f"±{DEFAULT_THRESHOLD}% every {format_interval(DEFAULT_INTERVAL)}"
             ),
         )
         await query.edit_message_reply_markup(reply_markup=get_keyboard())
@@ -1332,7 +1346,8 @@ async def menu(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
             await update.message.reply_text(
                 (
                     f"{SUCCESS_EMOJI} Subscribed to {symbol_for(coin)} at "
-                    f"±{DEFAULT_THRESHOLD}% every {DEFAULT_INTERVAL}s"
+                    f"±{DEFAULT_THRESHOLD}% every "
+                    f"{format_interval(DEFAULT_INTERVAL)}"
                 ),
                 reply_markup=get_keyboard(),
             )
