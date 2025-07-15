@@ -19,23 +19,12 @@ import numpy as np
 from apscheduler.schedulers.asyncio import AsyncIOScheduler
 from dotenv import load_dotenv
 from matplotlib import pyplot as plt
-from telegram import (
-    Bot,
-    BotCommand,
-    InlineKeyboardButton,
-    InlineKeyboardMarkup,
-    KeyboardButton,
-    ReplyKeyboardMarkup,
-    Update,
-)
-from telegram.ext import (
-    ApplicationBuilder,
-    CallbackQueryHandler,
-    CommandHandler,
-    ContextTypes,
-    MessageHandler,
-    filters,
-)
+from telegram import (Bot, BotCommand, InlineKeyboardButton,
+                      InlineKeyboardMarkup, KeyboardButton,
+                      ReplyKeyboardMarkup, Update)
+from telegram.ext import (ApplicationBuilder, CallbackQueryHandler,
+                          CommandHandler, ContextTypes, MessageHandler,
+                          filters)
 
 matplotlib.use("Agg")
 
@@ -45,6 +34,12 @@ BOT_NAME = "PricePulseWatcherBot"
 DEFAULT_THRESHOLD = 0.1
 DEFAULT_INTERVAL = 300
 PRICE_CHECK_INTERVAL = 30
+
+# optional CoinGecko API key for higher rate limits
+COINGECKO_API_KEY = os.getenv("COINGECKO_API_KEY")
+COINGECKO_HEADERS = (
+    {"x-cg-pro-api-key": COINGECKO_API_KEY} if COINGECKO_API_KEY else None
+)
 
 # emojis used for price movements
 UP_ARROW = "\U0001f53a"  # up triangle
@@ -121,7 +116,7 @@ async def fetch_trending_coins() -> None:
     url = "https://api.coingecko.com/api/v3/search/trending"
     try:
         async with aiohttp.ClientSession() as session:
-            async with session.get(url) as resp:
+            async with session.get(url, headers=COINGECKO_HEADERS) as resp:
                 if resp.status != 200:
                     logger.warning("trending request failed: %s", resp.status)
                     return
@@ -151,7 +146,7 @@ async def fetch_top_coins() -> None:
     )
     try:
         async with aiohttp.ClientSession() as session:
-            async with session.get(url) as resp:
+            async with session.get(url, headers=COINGECKO_HEADERS) as resp:
                 if resp.status != 200:
                     logger.warning("top coins request failed: %s", resp.status)
                     return
@@ -359,7 +354,7 @@ async def get_price(
                 if wait:
                     await asyncio.sleep(wait)
                 try:
-                    resp = await session.get(url)
+                    resp = await session.get(url, headers=COINGECKO_HEADERS)
                 except aiohttp.ClientError as exc:
                     logger.error("price request failed: %s", exc)
                     return None
@@ -395,7 +390,7 @@ async def get_coin_info(
                 if wait:
                     await asyncio.sleep(wait)
                 try:
-                    resp = await session.get(url)
+                    resp = await session.get(url, headers=COINGECKO_HEADERS)
                 except aiohttp.ClientError as exc:
                     logger.error("coin info request failed: %s", exc)
                     return None, f"request failed: {exc}"
@@ -433,7 +428,7 @@ async def fetch_ohlcv(
             if wait:
                 await asyncio.sleep(wait)
             try:
-                resp = await session.get(url)
+                resp = await session.get(url, headers=COINGECKO_HEADERS)
             except aiohttp.ClientError as exc:
                 logger.error("ohlcv request failed: %s", exc)
                 return None, f"request failed: {exc}"
@@ -476,7 +471,7 @@ async def get_market_info(
             if wait:
                 await asyncio.sleep(wait)
             try:
-                resp = await session.get(url)
+                resp = await session.get(url, headers=COINGECKO_HEADERS)
             except aiohttp.ClientError as exc:
                 logger.error("market info request failed: %s", exc)
                 return None
@@ -511,7 +506,7 @@ async def get_market_chart(
             if wait:
                 await asyncio.sleep(wait)
             try:
-                resp = await session.get(url)
+                resp = await session.get(url, headers=COINGECKO_HEADERS)
             except aiohttp.ClientError as exc:
                 logger.error("chart request failed: %s", exc)
                 return None, f"request failed: {exc}"
@@ -543,7 +538,7 @@ async def get_global_overview(
                 if wait:
                     await asyncio.sleep(wait)
                 try:
-                    resp = await session.get(url)
+                    resp = await session.get(url, headers=COINGECKO_HEADERS)
                 except aiohttp.ClientError as exc:
                     logger.error("global overview request failed: %s", exc)
                     return None, f"request failed: {exc}"
