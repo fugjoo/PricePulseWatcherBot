@@ -29,6 +29,7 @@ from telegram import (
     ReplyKeyboardMarkup,
     Update,
 )
+from telegram.constants import ChatAction
 from telegram.ext import (
     ApplicationBuilder,
     CallbackQueryHandler,
@@ -1142,6 +1143,10 @@ async def build_list_keyboard(chat_id: int) -> Optional[InlineKeyboardMarkup]:
 async def list_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     """List all active subscriptions for the chat."""
     # Use inline keyboard so entries can be removed easily
+    await context.bot.send_chat_action(
+        chat_id=update.effective_chat.id,
+        action=ChatAction.TYPING,
+    )
     entries = await build_sub_entries(update.effective_chat.id)
     if not entries:
         await update.message.reply_text(f"{INFO_EMOJI} No active subscriptions")
@@ -1399,10 +1404,7 @@ async def menu(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
             chat_id=update.effective_chat.id,
             message_id=update.message.message_id,
         )
-        await update.message.reply_text(
-            "Use /add or the buttons below to subscribe to price alerts.",
-            reply_markup=get_keyboard(),
-        )
+        # Do not send any text after reloading the keyboard
     elif text == f"{LIST_EMOJI} List":
         await list_cmd(update, context)
     elif text == f"{HELP_EMOJI} Help":
