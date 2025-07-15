@@ -658,6 +658,7 @@ async def help_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
         "/list - list subscriptions\n"
         "/info <coin> - coin information\n"
         "/chart(s) <coin> [days] - price chart\n"
+        "/trends - show trending coins\n"
         "/global - global market stats\n"
         "Intervals can be like 1h, 15m or 30s",
         reply_markup=get_keyboard(),
@@ -858,6 +859,28 @@ async def global_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None
     await update.message.reply_text(text)
 
 
+async def trends_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    """Show currently trending coins and their prices."""
+    await fetch_trending_coins()
+    if not COINS:
+        await update.message.reply_text(f"{ERROR_EMOJI} Failed to fetch data")
+        return
+    lines = []
+    async with aiohttp.ClientSession() as session:
+        for coin in COINS:
+            info = await get_market_info(coin, session=session) or {}
+            price = info.get("current_price")
+            change_24h = info.get("price_change_percentage_24h")
+            line = f"{symbol_for(coin)}"
+            if price is not None:
+                line += f" ${format_price(price)}"
+            if change_24h is not None:
+                line += f" ({change_24h:+.2f}% 24h)"
+            lines.append(line)
+    text = f"{INFO_EMOJI} Trending coins:\n" + "\n".join(lines)
+    await update.message.reply_text(text)
+
+
 async def button(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     """Handle inline keyboard button callbacks."""
     query = update.callback_query
@@ -964,6 +987,7 @@ async def main() -> None:
     app.add_handler(CommandHandler("list", list_cmd))
     app.add_handler(CommandHandler("info", info_cmd))
     app.add_handler(CommandHandler("chart", chart_cmd))
+    app.add_handler(CommandHandler("trends", trends_cmd))
     app.add_handler(CommandHandler("global", global_cmd))
     app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, menu))
     app.add_handler(CallbackQueryHandler(button))
@@ -986,6 +1010,7 @@ async def main() -> None:
             BotCommand("list", "List subscriptions"),
             BotCommand("info", "Coin information"),
             BotCommand("chart", "Price chart"),
+            BotCommand("trends", "Trending coins"),
             BotCommand("global", "Global market"),
         ]
     )
