@@ -35,6 +35,7 @@ price check frequency. Start the bot and run `/start` in a chat with it.
 - `/list` – list active subscriptions
 - `/info <coin>` – show current coin data
 - `/chart <coin> [days]` – plot price history (alias `/charts`)
+- `/trends` – show trending coins
 - `/global` – show global market stats
 
 Intervals accept plain seconds or values like `1h`, `15m` or `30s`.
