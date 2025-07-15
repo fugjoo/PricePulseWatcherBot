@@ -22,6 +22,8 @@ pip install -r requirements.txt
 cp .env.example .env             # edit TELEGRAM_TOKEN
 # DB_PATH sets the SQLite file used (default subs.db)
 # COINGECKO_API_KEY is optional for higher rate limits
+# LOG_LEVEL enables verbose output when set to DEBUG
+# LOG_FILE writes logs to the given file (default bot.log)
 cp config.json.example config.json
 python run.py
 ```

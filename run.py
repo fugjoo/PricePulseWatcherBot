@@ -182,7 +182,16 @@ async def fetch_top_coins() -> None:
         logger.error("error fetching top coins: %s", exc)
 
 
-logging.basicConfig(level=os.getenv("LOG_LEVEL", "INFO").upper())
+LOG_FILE = os.getenv("LOG_FILE")
+_handlers = [logging.StreamHandler()]
+if LOG_FILE:
+    _handlers.append(logging.FileHandler(LOG_FILE))
+
+logging.basicConfig(
+    level=os.getenv("LOG_LEVEL", "INFO").upper(),
+    handlers=_handlers,
+    force=True,
+)
 logger = logging.getLogger(__name__)
 
 # price cache: coin -> (price, timestamp)
