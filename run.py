@@ -9,6 +9,7 @@ import signal
 import time
 from collections import defaultdict, deque
 from decimal import Decimal
+from difflib import get_close_matches
 from io import BytesIO
 from typing import Deque, Dict, Optional, Tuple
 
@@ -125,6 +126,29 @@ def symbol_for(coin: str) -> str:
 def normalize_coin(value: str) -> str:
     """Return the coin ID for a given symbol or coin name."""
     return SYMBOL_TO_COIN.get(value.lower(), value.lower())
+
+
+def suggest_coins(name: str, limit: int = 3) -> list[str]:
+    """Return close matches for a coin or symbol."""
+    candidates = list(
+        {
+            *COINS,
+            *TOP_COINS,
+            *COIN_SYMBOLS.keys(),
+        }
+    )
+    matches = get_close_matches(
+        name.lower(), [c.lower() for c in candidates], n=limit, cutoff=0.6
+    )
+    # map back to coin ids and remove duplicates
+    coins = [normalize_coin(m) for m in matches]
+    seen: set[str] = set()
+    result: list[str] = []
+    for coin in coins:
+        if coin not in seen:
+            seen.add(coin)
+            result.append(coin)
+    return result
 
 
 async def fetch_trending_coins() -> None:
@@ -909,6 +933,15 @@ async def subscribe_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE) -> N
         )
         return
     coin = normalize_coin(context.args[0])
+    info = await get_market_info(coin, user=update.effective_chat.id)
+    if not info or info.get("current_price") is None:
+        suggestions = suggest_coins(coin)
+        msg = f"{ERROR_EMOJI} Unknown coin"
+        if suggestions:
+            syms = ", ".join(symbol_for(c) for c in suggestions)
+            msg += f". Meintest du: {syms}?"
+        await update.message.reply_text(msg)
+        return
     try:
         threshold = (
             float(context.args[1]) if len(context.args) > 1 else DEFAULT_THRESHOLD
