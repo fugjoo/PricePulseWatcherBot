@@ -948,7 +948,9 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     """Handle /start command and show main menu."""
     logger.debug("/start from %s", update.effective_chat.id)
     await update.message.reply_text(
-        f"{WELCOME_EMOJI} Welcome to {BOT_NAME}! Choose an action:",
+        f"{WELCOME_EMOJI} Welcome to {BOT_NAME}! "
+        "Use /add or the buttons below to subscribe to price alerts. "
+        "Choose an action:",
         reply_markup=get_keyboard(),
     )
 
@@ -1021,10 +1023,7 @@ async def subscribe_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE) -> N
         interval,
     )
     await update.message.reply_text(
-        (
-            f"{SUCCESS_EMOJI} Subscribed to {symbol_for(coin)} at ±{threshold}% "
-            f"every {format_interval(interval)}"
-        ),
+        f"{SUB_EMOJI} Subscribed to {symbol_for(coin)}",
         reply_markup=get_keyboard(),
     )
 
@@ -1288,10 +1287,7 @@ async def button(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
         logger.info("chat %s subscribed via button to %s", query.message.chat_id, coin)
         await context.bot.send_message(
             chat_id=query.message.chat_id,
-            text=(
-                f"{SUCCESS_EMOJI} Subscribed to {symbol_for(coin)} at "
-                f"±{DEFAULT_THRESHOLD}% every {format_interval(DEFAULT_INTERVAL)}"
-            ),
+            text=f"{SUB_EMOJI} Subscribed to {symbol_for(coin)}",
         )
         await query.edit_message_reply_markup(reply_markup=get_keyboard())
     elif query.data.startswith("del:"):
@@ -1344,15 +1340,17 @@ async def menu(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
                 DEFAULT_INTERVAL,
             )
             await update.message.reply_text(
-                (
-                    f"{SUCCESS_EMOJI} Subscribed to {symbol_for(coin)} at "
-                    f"±{DEFAULT_THRESHOLD}% every "
-                    f"{format_interval(DEFAULT_INTERVAL)}"
-                ),
+                f"{SUB_EMOJI} Subscribed to {symbol_for(coin)}",
                 reply_markup=get_keyboard(),
             )
     elif text == RELOAD_EMOJI:
-        await update.message.reply_text("New suggestion:", reply_markup=get_keyboard())
+        await context.bot.delete_message(
+            chat_id=update.effective_chat.id,
+            message_id=update.message.message_id,
+        )
+        await update.message.reply_text(
+            "Choose an action:", reply_markup=get_keyboard()
+        )
     elif text == f"{LIST_EMOJI} List":
         await list_cmd(update, context)
     elif text == f"{HELP_EMOJI} Help":
