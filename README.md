@@ -31,6 +31,24 @@ python run.py
 Adjust `config.json` to change the default threshold, subscription interval or
 price check frequency. Start the bot and run `/start` in a chat with it.
 
+## Configuration
+
+Create `.env` and `config.json` files from the provided examples. The env file holds credentials and runtime options:
+
+- `TELEGRAM_TOKEN` – token from BotFather
+- `DB_PATH` – SQLite database path (default `subs.db`)
+- `COINGECKO_API_KEY` – optional CoinGecko key
+- `PRICE_API_PROVIDER` – `coingecko` or `coinmarketcap`
+- `COINMARKETCAP_API_KEY` – optional CoinMarketCap key
+- `LOG_LEVEL` – log level such as INFO
+- `LOG_FILE` – file to write logs to
+
+`config.json` contains defaults controlling alert behaviour:
+
+- `default_threshold` – percent change that triggers an alert
+- `default_interval` – subscription interval when none is given
+- `price_check_interval` – how often prices are checked
+
 ### Commands
 
 - `/add <coin> [pct] [interval]` – subscribe to price alerts
@@ -49,6 +67,17 @@ Run the provided script to set up a virtual environment automatically:
 
 ```bash
 ./install.sh
+```
+
+## Contributing
+
+Activate your virtual environment and run the following checks before opening a pull request:
+
+```bash
+isort .
+black .
+flake8
+pytest
 ```
 
 ## License
