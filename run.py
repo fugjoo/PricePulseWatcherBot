@@ -956,8 +956,7 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     logger.debug("/start from %s", update.effective_chat.id)
     await update.message.reply_text(
         f"{WELCOME_EMOJI} Welcome to {BOT_NAME}! "
-        "Use /add or the buttons below to subscribe to price alerts. "
-        "Choose an action:",
+        "Use /add or the buttons below to subscribe to price alerts.",
         reply_markup=get_keyboard(),
     )
 
@@ -1356,7 +1355,8 @@ async def menu(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
             message_id=update.message.message_id,
         )
         await update.message.reply_text(
-            "Choose an action:", reply_markup=get_keyboard()
+            "Use /add or the buttons below to subscribe to price alerts.",
+            reply_markup=get_keyboard(),
         )
     elif text == f"{LIST_EMOJI} List":
         await list_cmd(update, context)
