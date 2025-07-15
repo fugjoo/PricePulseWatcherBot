@@ -242,7 +242,13 @@ def milestone_step(price: float) -> float:
         return 0.1
     if price >= 0.1:
         return 0.01
-    return 0.001
+    if price >= 0.01:
+        return 0.001
+    if price >= 0.001:
+        return 0.0001
+    if price >= 0.0001:
+        return 0.00001
+    return 0.000001
 
 
 def format_price(value: float) -> str:
