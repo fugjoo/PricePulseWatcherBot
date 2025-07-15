@@ -68,6 +68,7 @@ DEFAULT_ALERT_EMOJI = ROCKET
 
 def parse_duration(value: str) -> int:
     """Return seconds for a duration string like '15m' or '1h'."""
+    # Accept a bare number of seconds or a value suffixed with d/h/m/s
     if value.isdigit():
         return int(value)
     match = re.fullmatch(r"(\d+)([dhms])", value.lower())
@@ -80,6 +81,7 @@ def parse_duration(value: str) -> int:
 
 def format_interval(seconds: int) -> str:
     """Return a short string representation for a duration in seconds."""
+    # Prefer the largest unit that divides the input evenly
     if seconds % 86400 == 0:
         return f"{seconds // 86400}d"
     if seconds % 3600 == 0:
@@ -91,6 +93,7 @@ def format_interval(seconds: int) -> str:
 
 def load_config(path: str = "config.json") -> None:
     """Load defaults from a JSON config if present."""
+    # Values in the optional config file override hard coded defaults
     if not os.path.isfile(path):
         return
     try:
@@ -108,11 +111,13 @@ def load_config(path: str = "config.json") -> None:
             logger.warning("invalid default_threshold in config")
     if "default_interval" in data:
         try:
+            # parse_duration understands suffixes like h or m
             DEFAULT_INTERVAL = parse_duration(str(data["default_interval"]))
         except ValueError:
             logger.warning("invalid default_interval in config")
     if "price_check_interval" in data:
         try:
+            # Frequency for periodic price checks
             PRICE_CHECK_INTERVAL = parse_duration(str(data["price_check_interval"]))
         except ValueError:
             logger.warning("invalid price_check_interval in config")
@@ -131,16 +136,19 @@ TOP_COINS: list[str] = []
 
 def symbol_for(coin: str) -> str:
     """Return the symbol for a coin ID."""
+    # Fallback to upper case coin id when unknown
     return COIN_SYMBOLS.get(coin, coin.upper())
 
 
 def normalize_coin(value: str) -> str:
     """Return the coin ID for a given symbol or coin name."""
+    # Resolve both symbol and coin name to a canonical id
     return SYMBOL_TO_COIN.get(value.lower(), value.lower())
 
 
 def suggest_coins(name: str, limit: int = 3) -> list[str]:
     """Return close matches for a coin or symbol."""
+    # Use fuzzy matching against known coins and top coins
     candidates = list(
         {
             *COINS,
@@ -164,6 +172,7 @@ def suggest_coins(name: str, limit: int = 3) -> list[str]:
 
 async def find_coin(query: str) -> Optional[str]:
     """Return coin id for a symbol or name via the CoinGecko search API."""
+    # Query CoinGecko search to expand unknown symbols
     url = f"https://api.coingecko.com/api/v3/search?query={query}"
     try:
         async with aiohttp.ClientSession() as session:
@@ -195,6 +204,7 @@ async def find_coin(query: str) -> Optional[str]:
 
 async def fetch_trending_coins() -> None:
     """Update COINS and symbol mappings using the trending list from CoinGecko."""
+    # Stores the top trending coins so we can offer quick subscription buttons
     url = "https://api.coingecko.com/api/v3/search/trending"
     try:
         async with aiohttp.ClientSession() as session:
@@ -222,6 +232,7 @@ async def fetch_trending_coins() -> None:
 
 async def fetch_top_coins() -> None:
     """Populate TOP_COINS with the coins that have the highest market cap."""
+    # Used for random suggestions in the reply keyboard
     url = (
         "https://api.coingecko.com/api/v3/coins/markets"
         "?vs_currency=usd&order=market_cap_desc&per_page=50&page=1"
@@ -307,6 +318,7 @@ async def api_get(
 
 def milestone_step(price: float) -> float:
     """Return step size for round-number alerts based on price."""
+    # Higher priced coins use larger milestones
     if price >= 1000:
         return 100.0
     if price >= 100:
@@ -328,11 +340,13 @@ def milestone_step(price: float) -> float:
 
 def format_price(value: float) -> str:
     """Return price as decimal string without scientific notation."""
+    # str.format would use scientific notation for small numbers
     return format(Decimal(str(value)), "f")
 
 
 def milestones_crossed(last: float, current: float) -> list[float]:
     """Return a list of price levels crossed between two prices."""
+    # Walk from the previous rounded level towards the current price
     step = milestone_step(max(last, current))
     levels: list[float] = []
     if current > last:
@@ -350,6 +364,7 @@ def milestones_crossed(last: float, current: float) -> list[float]:
 
 def trend_emojis(change: float) -> str:
     """Return arrow and rocket/bomb emojis for a price change."""
+    # Big moves get an additional rocket or bomb
     if change >= 10:
         return f"{UP_ARROW} {ROCKET}"
     if change <= -10:
@@ -364,6 +379,7 @@ def calculate_volume_profile(candles: list[dict]) -> dict:
     volume of a candle is distributed evenly across its price range and added
     to one of 100 bins spanning the observed price range.
     """
+    # Build a histogram of where volume traded across the price range
 
     if not candles:
         raise ValueError("no candles provided")
@@ -426,6 +442,7 @@ def calculate_volume_profile(candles: list[dict]) -> dict:
 
 async def init_db() -> None:
     """Ensure the subscriptions table exists."""
+    # Creates the table and migrates old schemas if needed
     async with aiosqlite.connect(DB_FILE) as db:
         await db.execute(
             """
@@ -463,6 +480,7 @@ async def get_price(
     user: Optional[int] = None,
 ) -> Optional[float]:
     """Return the current USD price for a coin."""
+    # Check in-memory cache before hitting the API
     now = time.time()
     cached = PRICE_CACHE.get(coin)
     if cached and now - cached[1] < 60:
@@ -520,6 +538,7 @@ async def get_coin_info(
     user: Optional[int] = None,
 ) -> tuple[Optional[dict], Optional[str]]:
     """Return detailed coin info."""
+    # Support both API providers for detailed data
     if API_PROVIDER == "coinmarketcap":
         symbol = symbol_for(coin)
         url = (
@@ -577,6 +596,7 @@ async def fetch_ohlcv(
     user: Optional[int] = None,
 ) -> tuple[Optional[list[dict]], Optional[str]]:
     """Return OHLCV candles from Binance."""
+    # Binance is used for chart related commands
 
     url = (
         "https://api.binance.com/api/v3/klines"
@@ -616,6 +636,7 @@ async def get_market_info(
     user: Optional[int] = None,
 ) -> Optional[dict]:
     """Return basic market info for a coin."""
+    # Fetch a small subset of data used in alerts and listings
     if API_PROVIDER == "coinmarketcap":
         symbol = symbol_for(coin)
         url = (
@@ -659,6 +680,7 @@ async def get_market_chart(
     coin: str, days: int, session: Optional[aiohttp.ClientSession] = None
 ) -> tuple[Optional[list[tuple[float, float]]], Optional[str]]:
     """Return historical price chart data for a coin."""
+    # Convert ``days`` to a timestamp range for the provider API
     end_ts = int(time.time())
     start_ts = end_ts - days * 86400
     if API_PROVIDER == "coinmarketcap":
@@ -707,6 +729,7 @@ async def get_global_overview(
     user: Optional[int] = None,
 ) -> tuple[Optional[dict], Optional[str]]:
     """Return global market data."""
+    # Used by the /global command
     if API_PROVIDER == "coinmarketcap":
         url = "https://pro-api.coinmarketcap.com/v1/global-metrics/quotes/latest"
         headers = CMC_HEADERS
@@ -752,6 +775,7 @@ async def get_global_overview(
 async def subscribe_coin(
     chat_id: int, coin: str, threshold: float, interval: int
 ) -> None:
+    # Insert or update a subscription record
     async with aiosqlite.connect(DB_FILE) as db:
         cursor = await db.execute(
             (
@@ -789,6 +813,7 @@ async def subscribe_coin(
 
 
 async def unsubscribe_coin(chat_id: int, coin: str) -> None:
+    # Remove a subscription from the database
     async with aiosqlite.connect(DB_FILE) as db:
         await db.execute(
             "DELETE FROM subscriptions WHERE chat_id=? AND coin_id=?",
@@ -801,6 +826,7 @@ async def unsubscribe_coin(chat_id: int, coin: str) -> None:
 async def list_subscriptions(
     chat_id: int,
 ) -> list[Tuple[int, str, float, int, Optional[float], Optional[float]]]:
+    # Return all saved subscriptions for a chat
     async with aiosqlite.connect(DB_FILE) as db:
         cursor = await db.execute(
             "SELECT id, coin_id, threshold, interval, last_price, last_alert_ts "
@@ -823,6 +849,7 @@ async def list_subscriptions(
 
 
 async def set_last_price(sub_id: int, price: float) -> None:
+    # Store the last price and alert time for a subscription
     async with aiosqlite.connect(DB_FILE) as db:
         await db.execute(
             "UPDATE subscriptions SET last_price=?, last_alert_ts=? WHERE id=?",
@@ -836,14 +863,14 @@ async def send_rate_limited(
 ) -> None:
     """Send a message respecting basic rate limits."""
     now = time.time()
-    # cleanup timestamps
+    # remove timestamps outside the rate windows
     user_q = user_messages[chat_id]
     while user_q and now - user_q[0] > 60:
         user_q.popleft()
     while global_messages and now - global_messages[0] > 1:
         global_messages.popleft()
 
-    # wait if limits exceeded
+    # pause when user or global limits have been hit
     if len(user_q) >= 20:
         wait = max(0, 60 - (now - user_q[0]))  # clamp negative sleeps
         await asyncio.sleep(wait)
@@ -858,6 +885,7 @@ async def send_rate_limited(
 
 async def check_prices(app) -> None:
     """Iterate subscriptions, alert on significant price changes."""
+    # Group subscriptions by coin so each price is fetched only once
     async with aiosqlite.connect(DB_FILE) as db:
         cursor = await db.execute(
             "SELECT id, chat_id, coin_id, threshold, interval, last_price, "
@@ -885,6 +913,7 @@ async def check_prices(app) -> None:
                 continue
 
             prev = MILESTONE_CACHE.get((chat_id, coin), last_price)
+            # Notify when round-number milestones are crossed
             for level in milestones_crossed(prev, price):
                 symbol = symbol_for(coin)
                 if price > prev:
@@ -936,6 +965,7 @@ ERROR_EMOJI = "\u26a0\ufe0f"
 
 
 def get_keyboard() -> ReplyKeyboardMarkup:
+    # Offer quick-add buttons for random popular coins
     coins_source = TOP_COINS[:20] if TOP_COINS else (COINS or ["bitcoin"])
     coins = random.sample(coins_source, k=min(3, len(coins_source)))
     subs = [KeyboardButton(f"{SUB_EMOJI} Add {symbol_for(c)}") for c in coins]
@@ -953,6 +983,7 @@ def get_keyboard() -> ReplyKeyboardMarkup:
 
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     """Handle /start command and show main menu."""
+    # Send greeting and persistent keyboard
     logger.debug("/start from %s", update.effective_chat.id)
     await update.message.reply_text(
         f"{WELCOME_EMOJI} Welcome to {BOT_NAME}! "
@@ -963,6 +994,7 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
 
 async def help_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     """Display usage information."""
+    # Send command reference and show keyboard again
     await update.message.reply_text(
         f"{INFO_EMOJI} /add <coin> [pct] [interval] - subscribe to price alerts\n"
         "/remove <coin> - remove subscription\n"
@@ -979,6 +1011,7 @@ async def help_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
 
 async def subscribe_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     """Subscribe the chat to a coin at a given threshold and interval."""
+    # Parse arguments and validate the coin
     if not context.args:
         await update.message.reply_text(
             f"{ERROR_EMOJI} Usage: /add <coin> [pct] [interval]",
@@ -1021,6 +1054,7 @@ async def subscribe_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE) -> N
         return
 
     await subscribe_coin(update.effective_chat.id, coin, threshold, interval)
+    # Log the subscription details
     logger.info(
         "chat %s subscribes via command to %s at %.2f%% every %ss",
         update.effective_chat.id,
@@ -1036,6 +1070,7 @@ async def subscribe_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE) -> N
 
 async def unsubscribe_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     """Remove an existing subscription."""
+    # Expect a coin symbol as the only argument
     if not context.args:
         await update.message.reply_text(f"{ERROR_EMOJI} Usage: /remove <coin>")
         return
@@ -1054,6 +1089,7 @@ async def unsubscribe_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
 
 async def build_sub_entries(chat_id: int) -> list[tuple[str, str]]:
     """Return list of (coin, formatted text) for all subscriptions."""
+    # Gather current prices and format human readable entries
     subs = await list_subscriptions(chat_id)
     entries: list[tuple[str, str]] = []
     for _, coin, threshold, interval, *_ in subs:
@@ -1087,6 +1123,7 @@ async def build_sub_entries(chat_id: int) -> list[tuple[str, str]]:
 
 async def build_list_keyboard(chat_id: int) -> Optional[InlineKeyboardMarkup]:
     """Return inline buttons to remove each subscription."""
+    # Each button deletes a specific subscription via callback data
     subs = await list_subscriptions(chat_id)
     if not subs:
         return None
@@ -1104,6 +1141,7 @@ async def build_list_keyboard(chat_id: int) -> Optional[InlineKeyboardMarkup]:
 
 async def list_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     """List all active subscriptions for the chat."""
+    # Use inline keyboard so entries can be removed easily
     entries = await build_sub_entries(update.effective_chat.id)
     if not entries:
         await update.message.reply_text(f"{INFO_EMOJI} No active subscriptions")
@@ -1117,6 +1155,7 @@ async def list_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
 
 async def info_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     """Show basic information about a coin."""
+    # Lookup the coin and display market data
     if not context.args:
         await update.message.reply_text(f"{ERROR_EMOJI} Usage: /info <coin>")
         return
@@ -1147,6 +1186,7 @@ async def info_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
 
 async def chart_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     """Send a price history chart as an image."""
+    # Fetch historical data and render with matplotlib
     if not context.args:
         await update.message.reply_text(f"{ERROR_EMOJI} Usage: /chart <coin> [days]")
         return
@@ -1179,6 +1219,7 @@ async def chart_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
 
 async def global_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     """Display global market statistics."""
+    # Combine several metrics from the global endpoint
     data, err = await get_global_overview(user=update.effective_chat.id)
     if err:
         await update.message.reply_text(f"{ERROR_EMOJI} {err}")
@@ -1211,6 +1252,7 @@ async def global_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None
 
 async def trends_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     """Show currently trending coins and their prices."""
+    # Fetch trending list then display price and 24h change
     await fetch_trending_coins()
     if not COINS:
         await update.message.reply_text(f"{ERROR_EMOJI} Failed to fetch data")
@@ -1238,6 +1280,7 @@ async def trends_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None
 
 async def valuearea_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     """Display VAL, POC and VAH for a trading pair."""
+    # Pull candles from Binance and compute volume profile statistics
 
     if len(context.args) < 3:
         await update.message.reply_text(
@@ -1280,6 +1323,7 @@ async def valuearea_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE) -> N
 
 async def button(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     """Handle inline keyboard button callbacks."""
+    # sub:/del:/edit: actions encoded in callback data
     query = update.callback_query
     await query.answer()
     if query.data.startswith("sub:"):
@@ -1331,6 +1375,7 @@ async def button(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
 
 async def menu(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     """Handle replies from the custom keyboard."""
+    # Parse button text sent as regular messages
     if not update.message:
         return
     text = update.message.text.strip()
@@ -1366,6 +1411,7 @@ async def menu(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
 
 async def main() -> None:
     """Start the bot."""
+    # Setup, register handlers and run until terminated
     load_dotenv()
     load_config()
     await init_db()
