@@ -42,8 +42,8 @@ load_dotenv()
 DB_FILE = os.getenv("DB_PATH", "subs.db")
 BOT_NAME = "PricePulseWatcherBot"
 DEFAULT_THRESHOLD = 0.1
-DEFAULT_INTERVAL = 60
-PRICE_CHECK_INTERVAL = 60
+DEFAULT_INTERVAL = 300
+PRICE_CHECK_INTERVAL = 30
 
 # emojis used for price movements
 UP_ARROW = "\U0001f53a"  # up triangle
