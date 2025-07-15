@@ -151,6 +151,37 @@ def suggest_coins(name: str, limit: int = 3) -> list[str]:
     return result
 
 
+async def find_coin(query: str) -> Optional[str]:
+    """Return coin id for a symbol or name via the CoinGecko search API."""
+    url = f"https://api.coingecko.com/api/v3/search?query={query}"
+    try:
+        async with aiohttp.ClientSession() as session:
+            async with session.get(url, headers=COINGECKO_HEADERS) as resp:
+                if resp.status != 200:
+                    return None
+                data = await resp.json()
+                for item in data.get("coins", []):
+                    symbol = item.get("symbol")
+                    coin_id = item.get("id")
+                    name = item.get("name")
+                    if symbol and coin_id and symbol.lower() == query.lower():
+                        COIN_SYMBOLS[coin_id] = symbol.upper()
+                        SYMBOL_TO_COIN[symbol.lower()] = coin_id
+                        return coin_id
+                for item in data.get("coins", []):
+                    symbol = item.get("symbol")
+                    coin_id = item.get("id")
+                    name = item.get("name", "")
+                    if coin_id and name.lower() == query.lower():
+                        if symbol:
+                            COIN_SYMBOLS[coin_id] = symbol.upper()
+                            SYMBOL_TO_COIN[symbol.lower()] = coin_id
+                        return coin_id
+    except aiohttp.ClientError as exc:
+        logger.warning("search failed: %s", exc)
+    return None
+
+
 async def fetch_trending_coins() -> None:
     """Update COINS and symbol mappings using the trending list from CoinGecko."""
     url = "https://api.coingecko.com/api/v3/search/trending"
@@ -932,10 +963,16 @@ async def subscribe_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE) -> N
             quote=True,
         )
         return
-    coin = normalize_coin(context.args[0])
+    coin_input = context.args[0]
+    coin = normalize_coin(coin_input)
     info = await get_market_info(coin, user=update.effective_chat.id)
     if not info or info.get("current_price") is None:
-        suggestions = suggest_coins(coin)
+        alt = await find_coin(coin_input)
+        if alt:
+            coin = alt
+            info = await get_market_info(coin, user=update.effective_chat.id)
+    if not info or info.get("current_price") is None:
+        suggestions = suggest_coins(coin_input)
         msg = f"{ERROR_EMOJI} Unknown coin"
         if suggestions:
             syms = ", ".join(symbol_for(c) for c in suggestions)
