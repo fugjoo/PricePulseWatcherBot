@@ -909,8 +909,15 @@ async def check_prices(app) -> None:
                     symbol = symbol_for(coin)
                     text = (
                         f"{symbol} moved {raw_change:+.2f}% in "
-                        f"{format_interval(interval)} (now ${price})"
+                        f"{format_interval(interval)} (now ${price}"
                     )
+                    info = await get_market_info(coin, user=chat_id)
+                    change_24h = None
+                    if info:
+                        change_24h = info.get("price_change_percentage_24h")
+                    if change_24h is not None:
+                        text += f", {change_24h:+.2f}% 24h"
+                    text += ")"
                     await send_rate_limited(
                         app.bot, chat_id, text, emoji=trend_emojis(raw_change)
                     )
