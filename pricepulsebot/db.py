@@ -1,3 +1,4 @@
+import json
 import time
 from typing import List, Optional, Tuple
 
@@ -18,6 +19,35 @@ async def init_db() -> None:
                 interval INTEGER NOT NULL DEFAULT 60,
                 last_price REAL,
                 last_alert_ts REAL
+            )
+            """
+        )
+        await db.execute(
+            """
+            CREATE TABLE IF NOT EXISTS global_info (
+                id INTEGER PRIMARY KEY CHECK (id = 1),
+                data TEXT,
+                fetched_at REAL
+            )
+            """
+        )
+        await db.execute(
+            """
+            CREATE TABLE IF NOT EXISTS coin_info (
+                coin_id TEXT PRIMARY KEY,
+                data TEXT,
+                fetched_at REAL
+            )
+            """
+        )
+        await db.execute(
+            """
+            CREATE TABLE IF NOT EXISTS coin_charts (
+                coin_id TEXT NOT NULL,
+                days INTEGER NOT NULL,
+                data TEXT,
+                fetched_at REAL,
+                PRIMARY KEY (coin_id, days)
             )
             """
         )
@@ -105,5 +135,72 @@ async def set_last_price(sub_id: int, price: float) -> None:
         await db.execute(
             "UPDATE subscriptions SET last_price=?, last_alert_ts=? WHERE id=?",
             (price, time.time(), sub_id),
+        )
+        await db.commit()
+
+
+async def get_global_data(max_age: int = 300) -> Optional[dict]:
+    async with aiosqlite.connect(config.DB_FILE) as db:
+        cursor = await db.execute("SELECT data, fetched_at FROM global_info WHERE id=1")
+        row = await cursor.fetchone()
+        await cursor.close()
+    if row and time.time() - row[1] < max_age:
+        return json.loads(row[0])
+    return None
+
+
+async def set_global_data(data: dict) -> None:
+    async with aiosqlite.connect(config.DB_FILE) as db:
+        await db.execute("DELETE FROM global_info WHERE id=1")
+        await db.execute(
+            "INSERT INTO global_info (id, data, fetched_at) VALUES (1, ?, ?)",
+            (json.dumps(data), time.time()),
+        )
+        await db.commit()
+
+
+async def get_coin_info(coin: str, max_age: int = 300) -> Optional[dict]:
+    async with aiosqlite.connect(config.DB_FILE) as db:
+        cursor = await db.execute(
+            "SELECT data, fetched_at FROM coin_info WHERE coin_id=?",
+            (coin,),
+        )
+        row = await cursor.fetchone()
+        await cursor.close()
+    if row and time.time() - row[1] < max_age:
+        return json.loads(row[0])
+    return None
+
+
+async def set_coin_info(coin: str, data: dict) -> None:
+    async with aiosqlite.connect(config.DB_FILE) as db:
+        await db.execute(
+            "REPLACE INTO coin_info (coin_id, data, fetched_at) VALUES (?, ?, ?)",
+            (coin, json.dumps(data), time.time()),
+        )
+        await db.commit()
+
+
+async def get_coin_chart(coin: str, days: int, max_age: int = 300) -> Optional[list]:
+    async with aiosqlite.connect(config.DB_FILE) as db:
+        cursor = await db.execute(
+            "SELECT data, fetched_at FROM coin_charts WHERE coin_id=? AND days=?",
+            (coin, days),
+        )
+        row = await cursor.fetchone()
+        await cursor.close()
+    if row and time.time() - row[1] < max_age:
+        return json.loads(row[0])
+    return None
+
+
+async def set_coin_chart(coin: str, days: int, data: list) -> None:
+    async with aiosqlite.connect(config.DB_FILE) as db:
+        await db.execute(
+            (
+                "REPLACE INTO coin_charts (coin_id, days, data, fetched_at) "
+                "VALUES (?, ?, ?, ?)"
+            ),
+            (coin, days, json.dumps(data), time.time()),
         )
         await db.commit()
