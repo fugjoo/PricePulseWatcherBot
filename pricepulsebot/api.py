@@ -387,10 +387,7 @@ async def fetch_trending_coins() -> None:
         async with aiohttp.ClientSession() as session:
             resp = await api_get(url, session=session, headers=config.COINGECKO_HEADERS)
             if not resp or resp.status != 200:
-                config.logger.warning(
-                    "trending request failed: %s", getattr(resp, "status", "n/a")
-                )
-                return
+                raise RuntimeError(getattr(resp, "status", "n/a"))
             data = await resp.json()
             coins: list[str] = []
             for c in data.get("coins", [])[:10]:
@@ -404,8 +401,15 @@ async def fetch_trending_coins() -> None:
                         config.SYMBOL_TO_COIN[symbol.lower()] = coin_id
             if coins:
                 config.COINS = coins
+                await db.set_trending_coins(coins)
     except aiohttp.ClientError as exc:
         config.logger.error("error fetching trending coins: %s", exc)
+    except RuntimeError as err:
+        config.logger.warning("trending request failed: %s", err)
+    if not config.COINS:
+        cached = await db.get_trending_coins(max_age=config.CACHE_TTL)
+        if cached:
+            config.COINS = cached
 
 
 async def fetch_top_coins() -> None:
