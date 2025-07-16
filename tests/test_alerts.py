@@ -5,7 +5,11 @@ sys.path.insert(0, os.path.dirname(os.path.dirname(__file__)))  # noqa: E402
 
 import pytest  # noqa: E402
 
-from run import global_messages, send_rate_limited, user_messages  # noqa: E402
+from pricepulsebot.handlers import (  # noqa: E402
+    global_messages,
+    send_rate_limited,
+    user_messages,
+)
 
 
 class DummyBot:

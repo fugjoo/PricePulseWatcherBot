@@ -5,9 +5,9 @@ sys.path.insert(0, os.path.dirname(os.path.dirname(__file__)))  # noqa: E402
 
 import pytest  # noqa: E402
 
-import run  # noqa: E402
+import pricepulsebot.api as api  # noqa: E402
 
-resolve_coin = run.resolve_coin
+resolve_coin = api.resolve_coin
 
 
 @pytest.mark.asyncio
@@ -17,7 +17,7 @@ async def test_resolve_coin_direct(monkeypatch):
             return {"current_price": 1.0}
         return None
 
-    monkeypatch.setattr(run, "get_market_info", fake_info)
+    monkeypatch.setattr(api, "get_market_info", fake_info)
     result = await resolve_coin("bitcoin")
     assert result == "bitcoin"
 
@@ -32,8 +32,8 @@ async def test_resolve_coin_fallback(monkeypatch):
     async def fake_find(query):
         return "ripple"
 
-    monkeypatch.setattr(run, "get_market_info", fake_info)
-    monkeypatch.setattr(run, "find_coin", fake_find)
+    monkeypatch.setattr(api, "get_market_info", fake_info)
+    monkeypatch.setattr(api, "find_coin", fake_find)
 
     result = await resolve_coin("xrp")
     assert result == "ripple"
