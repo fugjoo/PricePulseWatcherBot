@@ -1519,6 +1519,15 @@ async def menu(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
             chat_id=update.effective_chat.id,
             message_id=update.message.message_id,
         )
+                msg = await context.bot.send_message(
+            chat_id=update.effective_chat.id,
+            text="",
+            reply_markup=get_keyboard(),
+        )
+        await context.bot.delete_message(
+            chat_id=update.effective_chat.id,
+            message_id=msg.message_id,
+        )
     elif text == f"{LIST_EMOJI} List":
         await list_cmd(update, context)
     elif text == f"{HELP_EMOJI} Help":
