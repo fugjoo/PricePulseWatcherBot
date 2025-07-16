@@ -319,14 +319,16 @@ async def find_coin(query: str) -> Optional[str]:
             for item in data.get("coins", []):
                 symbol = item.get("symbol")
                 coin_id = item.get("id")
+                name = item.get("name", "")
+                if coin_id and coin_id.lower() == query.lower():
+                    if symbol:
+                        config.COIN_SYMBOLS[coin_id] = symbol.upper()
+                        config.SYMBOL_TO_COIN[symbol.lower()] = coin_id
+                    return coin_id
                 if symbol and coin_id and symbol.lower() == query.lower():
                     config.COIN_SYMBOLS[coin_id] = symbol.upper()
                     config.SYMBOL_TO_COIN[symbol.lower()] = coin_id
                     return coin_id
-            for item in data.get("coins", []):
-                symbol = item.get("symbol")
-                coin_id = item.get("id")
-                name = item.get("name", "")
                 if coin_id and name.lower() == query.lower():
                     if symbol:
                         config.COIN_SYMBOLS[coin_id] = symbol.upper()
