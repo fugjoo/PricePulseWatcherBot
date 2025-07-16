@@ -169,67 +169,78 @@ async def check_prices(app) -> None:
             )
             rows = await cursor.fetchall()
             await cursor.close()
-    by_coin: Dict[
-        str, List[Tuple[int, int, float, int, Optional[float], Optional[float]]]
-    ] = {}
-    for sub_id, chat_id, coin, threshold, interval, last_price, last_ts in rows:
-        by_coin.setdefault(coin, []).append(
-            (sub_id, chat_id, threshold, interval, last_price, last_ts)
-        )
-    coins = list(by_coin.keys())
-    prices: Dict[str, float] = {}
-    if len(coins) > 1:
-        groups = [coins[i : i + 250] for i in range(0, len(coins), 250)]  # noqa: E203
-        for group in groups:
-            prices.update(await api.get_prices(group, session=http_session, user=None))
-    else:
-        for coin in coins:
-            price = await api.get_price(coin, user=None)
-            if price is not None:
-                prices[coin] = price
-    for coin, subscriptions in by_coin.items():
-        price = prices.get(coin)
-        if price is None:
-            continue
-        for sub_id, chat_id, threshold, interval, last_price, last_ts in subscriptions:
-            if last_price is None:
-                await db.set_last_price(sub_id, price)
-                MILESTONE_CACHE[(chat_id, coin)] = price
+        by_coin: Dict[
+            str, List[Tuple[int, int, float, int, Optional[float], Optional[float]]]
+        ] = {}
+        for sub_id, chat_id, coin, threshold, interval, last_price, last_ts in rows:
+            by_coin.setdefault(coin, []).append(
+                (sub_id, chat_id, threshold, interval, last_price, last_ts)
+            )
+        coins = list(by_coin.keys())
+        prices: Dict[str, float] = {}
+        if len(coins) > 1:
+            groups = [
+                coins[i : i + 250] for i in range(0, len(coins), 250)  # noqa: E203
+            ]
+            for group in groups:
+                prices.update(
+                    await api.get_prices(group, session=http_session, user=None)
+                )
+        else:
+            for coin in coins:
+                price = await api.get_price(coin, user=None)
+                if price is not None:
+                    prices[coin] = price
+        for coin, subscriptions in by_coin.items():
+            price = prices.get(coin)
+            if price is None:
                 continue
-            prev = MILESTONE_CACHE.get((chat_id, coin), last_price)
-            for level in milestones_crossed(prev, price):
-                symbol = api.symbol_for(coin)
-                if price > prev:
-                    msg = f"{symbol} breaks through ${level:.0f} (now ${price})"
-                    await send_rate_limited(
-                        app.bot, chat_id, msg, emoji=f"{UP_ARROW} {ROCKET}"
-                    )
-                else:
-                    msg = f"{symbol} falls below ${level:.0f} (now ${price})"
-                    await send_rate_limited(
-                        app.bot, chat_id, msg, emoji=f"{DOWN_ARROW} {BOMB}"
-                    )
-            MILESTONE_CACHE[(chat_id, coin)] = price
-            if last_ts is None or time.time() - last_ts >= interval:
-                raw_change = (price - last_price) / last_price * 100
-                change = abs(raw_change)
-                if change >= threshold:
+            for (
+                sub_id,
+                chat_id,
+                threshold,
+                interval,
+                last_price,
+                last_ts,
+            ) in subscriptions:
+                if last_price is None:
+                    await db.set_last_price(sub_id, price)
+                    MILESTONE_CACHE[(chat_id, coin)] = price
+                    continue
+                prev = MILESTONE_CACHE.get((chat_id, coin), last_price)
+                for level in milestones_crossed(prev, price):
                     symbol = api.symbol_for(coin)
-                    text = (
-                        f"{symbol} moved {raw_change:+.2f}% in "
-                        f"{config.format_interval(interval)} (now ${price}"
-                    )
-                    info = await api.get_market_info(coin, user=chat_id)
-                    change_24h = None
-                    if info:
-                        change_24h = info.get("price_change_percentage_24h")
-                    if change_24h is not None:
-                        text += f", {change_24h:+.2f}% 24h"
-                    text += ")"
-                    await send_rate_limited(
-                        app.bot, chat_id, text, emoji=trend_emojis(raw_change)
-                    )
-                await db.set_last_price(sub_id, price)
+                    if price > prev:
+                        msg = f"{symbol} breaks through ${level:.0f} (now ${price})"
+                        await send_rate_limited(
+                            app.bot, chat_id, msg, emoji=f"{UP_ARROW} {ROCKET}"
+                        )
+                    else:
+                        msg = f"{symbol} falls below ${level:.0f} (now ${price})"
+                        await send_rate_limited(
+                            app.bot, chat_id, msg, emoji=f"{DOWN_ARROW} {BOMB}"
+                        )
+                MILESTONE_CACHE[(chat_id, coin)] = price
+                if last_ts is None or time.time() - last_ts >= interval:
+                    raw_change = (price - last_price) / last_price * 100
+                    change = abs(raw_change)
+                    if change >= threshold:
+                        symbol = api.symbol_for(coin)
+                        text = (
+                            f"{symbol} moved {raw_change:+.2f}% in "
+                            f"{config.format_interval(interval)} (now ${price}"
+                        )
+                        info = await api.get_market_info(coin, user=chat_id)
+                        change_24h = None
+                        if info:
+                            change_24h = info.get("price_change_percentage_24h")
+                        if change_24h is not None:
+                            text += f", {change_24h:+.2f}% 24h"
+                        text += ")"
+                        await send_rate_limited(
+                            app.bot, chat_id, text, emoji=trend_emojis(raw_change)
+                        )
+                    await db.set_last_price(sub_id, price)
 
 
 def get_keyboard() -> ReplyKeyboardMarkup:
