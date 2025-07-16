@@ -11,7 +11,6 @@ import numpy as np
 from matplotlib import pyplot as plt
 from telegram import (
     Bot,
-    ForceReply,
     InlineKeyboardButton,
     InlineKeyboardMarkup,
     KeyboardButton,
@@ -292,11 +291,7 @@ async def help_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
 async def subscribe_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     if not context.args:
         await update.message.reply_text(
-            f"{ERROR_EMOJI} Usage: /add <coin> [pct] [interval]",
-            quote=True,
-            reply_markup=ForceReply(
-                input_field_placeholder="/add <coin> [pct] [interval]"
-            ),
+            f"{ERROR_EMOJI} Usage: /add <coin> [pct] [interval]", quote=True
         )
         return
     coin_input = context.args[0]
@@ -337,10 +332,7 @@ async def subscribe_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE) -> N
 
 async def unsubscribe_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     if not context.args:
-        await update.message.reply_text(
-            f"{ERROR_EMOJI} Usage: /remove <coin>",
-            reply_markup=ForceReply(input_field_placeholder="/remove <coin>"),
-        )
+        await update.message.reply_text(f"{ERROR_EMOJI} Usage: /remove <coin>")
         return
     coin = api.normalize_coin(context.args[0])
     await db.unsubscribe_coin(update.effective_chat.id, coin)
@@ -400,10 +392,7 @@ async def list_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
 
 async def info_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     if not context.args:
-        await update.message.reply_text(
-            f"{ERROR_EMOJI} Usage: /info <coin>",
-            reply_markup=ForceReply(input_field_placeholder="/info <coin>"),
-        )
+        await update.message.reply_text(f"{ERROR_EMOJI} Usage: /info <coin>")
         return
     coin_input = context.args[0]
     coin = await api.resolve_coin(coin_input, user=update.effective_chat.id)
@@ -441,10 +430,7 @@ async def info_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
 
 async def chart_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     if not context.args:
-        await update.message.reply_text(
-            f"{ERROR_EMOJI} Usage: /chart <coin> [days]",
-            reply_markup=ForceReply(input_field_placeholder="/chart <coin> [days]"),
-        )
+        await update.message.reply_text(f"{ERROR_EMOJI} Usage: /chart <coin> [days]")
         return
     coin_input = context.args[0]
     coin = await api.resolve_coin(coin_input, user=update.effective_chat.id)
@@ -542,10 +528,7 @@ async def trends_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None
 async def valuearea_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     if len(context.args) < 3:
         await update.message.reply_text(
-            f"{ERROR_EMOJI} Usage: /valuearea <symbol> <interval> <count>",
-            reply_markup=ForceReply(
-                input_field_placeholder="/valuearea <symbol> <interval> <count>"
-            ),
+            f"{ERROR_EMOJI} Usage: /valuearea <symbol> <interval> <count>"
         )
         return
     symbol = context.args[0].upper()
