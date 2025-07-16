@@ -37,7 +37,9 @@ DEFAULT_INTERVAL = parse_duration(os.getenv("DEFAULT_INTERVAL", "5m"))
 PRICE_CHECK_INTERVAL = parse_duration(os.getenv("PRICE_CHECK_INTERVAL", "60s"))
 
 COINGECKO_API_KEY = os.getenv("COINGECKO_API_KEY")
-COINGECKO_BASE_URL = os.getenv("COINGECKO_BASE_URL", "https://api.coingecko.com/api/v3")
+COINGECKO_BASE_URL = (
+    os.getenv("COINGECKO_BASE_URL") or "https://api.coingecko.com/api/v3"
+)
 COINGECKO_HEADERS = (
     {"x-cg-pro-api-key": COINGECKO_API_KEY} if COINGECKO_API_KEY else None
 )
