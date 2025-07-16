@@ -1071,8 +1071,8 @@ ERROR_EMOJI = "\u26a0\ufe0f"
 
 
 def get_keyboard() -> ReplyKeyboardMarkup:
-    # Offer quick-add buttons for random popular coins
-    coins_source = TOP_COINS[:20] if TOP_COINS else (COINS or ["bitcoin"])
+    # Offer quick-add buttons from trending coins when available
+    coins_source = COINS or TOP_COINS[:20] or ["bitcoin"]
     coins = random.sample(coins_source, k=min(3, len(coins_source)))
     subs = [KeyboardButton(f"{SUB_EMOJI} Add {symbol_for(c)}") for c in coins]
     keyboard = [
@@ -1521,9 +1521,11 @@ async def menu(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
             chat_id=update.effective_chat.id,
             message_id=update.message.message_id,
         )
-                msg = await context.bot.send_message(
+        # Send a short message with a new keyboard then delete it so the
+        # persistent keyboard gets updated without cluttering the chat
+        msg = await context.bot.send_message(
             chat_id=update.effective_chat.id,
-            text="",
+            text="\u200b",
             reply_markup=get_keyboard(),
         )
         await context.bot.delete_message(
