@@ -183,7 +183,7 @@ def suggest_coins(name: str, limit: int = 3) -> list[str]:
 async def find_coin(query: str) -> Optional[str]:
     """Return coin id for a symbol or name via the CoinGecko search API."""
     # Query CoinGecko search to expand unknown symbols
-    url = f"{COINGECKO_BASE_URL}/search?query={query}"
+    url = f"{COINGECKO_BASE_URL}/search?query={quote(query, safe='')}"
     try:
         async with aiohttp.ClientSession() as session:
             resp = await api_get(url, session=session, headers=COINGECKO_HEADERS)
