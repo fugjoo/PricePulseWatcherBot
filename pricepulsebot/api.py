@@ -26,11 +26,15 @@ def encoded(coin: str) -> str:
     return quote(coin, safe="-")
 
 
-def suggest_coins(name: str, limit: int = 3) -> list[str]:
+async def suggest_coins(name: str, limit: int = 3) -> list[str]:
     candidates = list({*config.COINS, *config.TOP_COINS, *config.COIN_SYMBOLS.keys()})
     matches = get_close_matches(
         name.lower(), [c.lower() for c in candidates], n=limit, cutoff=0.6
     )
+    if not matches:
+        found = await find_coin(name)
+        return [found] if found else []
+
     coins = [normalize_coin(m) for m in matches]
     seen: set[str] = set()
     result: list[str] = []
