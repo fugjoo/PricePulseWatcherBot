@@ -501,26 +501,26 @@ async def global_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None
 
 async def trends_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     await api.fetch_trending_coins()
-    if not config.COINS:
+    data = await db.get_trending_coins()
+    if not data:
         await update.message.reply_text(f"{ERROR_EMOJI} Failed to fetch data")
         return
     lines = []
-    async with aiohttp.ClientSession() as session:
-        for coin in config.COINS:
-            info = (
-                await api.get_market_info(
-                    coin, session=session, user=update.effective_chat.id
-                )
-                or {}
-            )
-            price = info.get("current_price")
-            change_24h = info.get("price_change_percentage_24h")
-            line = f"{api.symbol_for(coin)}"
-            if price is not None:
-                line += f" ${format_price(price)}"
-            if change_24h is not None:
-                line += f" ({change_24h:+.2f}% 24h)"
-            lines.append(line)
+    for item in data:
+        coin_id = item.get("id")
+        symbol = item.get("symbol")
+        if coin_id and symbol:
+            config.COIN_SYMBOLS[coin_id] = symbol.upper()
+            config.SYMBOL_TO_COIN[symbol.lower()] = coin_id
+        line = f"{api.symbol_for(coin_id)}"
+        price = item.get("current_price")
+        change_24h = item.get("price_change_percentage_24h")
+        if price is not None:
+            line += f" ${format_price(price)}"
+        if change_24h is not None:
+            line += f" ({change_24h:+.2f}% 24h)"
+        lines.append(line)
+    config.COINS = [c.get("id") for c in data if c.get("id")]
     text = f"{INFO_EMOJI} Trending coins:\n" + "\n".join(lines)
     await update.message.reply_text(text)
 

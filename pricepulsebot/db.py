@@ -51,6 +51,15 @@ async def init_db() -> None:
             )
             """
         )
+        await db.execute(
+            """
+            CREATE TABLE IF NOT EXISTS trending_coins (
+                id INTEGER PRIMARY KEY CHECK (id = 1),
+                data TEXT,
+                fetched_at REAL
+            )
+            """
+        )
         cursor = await db.execute("PRAGMA table_info(subscriptions)")
         rows = await cursor.fetchall()
         await cursor.close()
@@ -202,5 +211,27 @@ async def set_coin_chart(coin: str, days: int, data: list) -> None:
                 "VALUES (?, ?, ?, ?)"
             ),
             (coin, days, json.dumps(data), time.time()),
+        )
+        await db.commit()
+
+
+async def get_trending_coins(max_age: int = 300) -> Optional[list[dict]]:
+    async with aiosqlite.connect(config.DB_FILE) as db:
+        cursor = await db.execute(
+            "SELECT data, fetched_at FROM trending_coins WHERE id=1"
+        )
+        row = await cursor.fetchone()
+        await cursor.close()
+    if row and time.time() - row[1] < max_age:
+        return json.loads(row[0])
+    return None
+
+
+async def set_trending_coins(coins: list[dict]) -> None:
+    async with aiosqlite.connect(config.DB_FILE) as db:
+        await db.execute("DELETE FROM trending_coins WHERE id=1")
+        await db.execute(
+            "INSERT INTO trending_coins (id, data, fetched_at) VALUES (1, ?, ?)",
+            (json.dumps(coins), time.time()),
         )
         await db.commit()
