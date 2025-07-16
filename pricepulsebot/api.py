@@ -27,7 +27,14 @@ def encoded(coin: str) -> str:
 
 
 def suggest_coins(name: str, limit: int = 3) -> list[str]:
-    candidates = list({*config.COINS, *config.TOP_COINS, *config.COIN_SYMBOLS.keys()})
+    candidates = list(
+        {
+            *config.COINS,
+            *config.TOP_COINS,
+            *config.COIN_SYMBOLS.keys(),
+            *config.SYMBOL_TO_COIN.keys(),
+        }
+    )
     matches = get_close_matches(
         name.lower(), [c.lower() for c in candidates], n=limit, cutoff=0.6
     )
