@@ -504,6 +504,10 @@ async def trends_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None
     if not data:
         await update.message.reply_text(f"{ERROR_EMOJI} Failed to fetch data")
         return
+    data = sorted(
+        data,
+        key=lambda x: (x.get("change_24h") is None, -(x.get("change_24h") or 0)),
+    )
     lines = []
     for item in data:
         coin_id = item.get("id")
