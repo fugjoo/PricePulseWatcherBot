@@ -58,10 +58,7 @@ COINGECKO_HEADERS = (
     {"x-cg-pro-api-key": COINGECKO_API_KEY} if COINGECKO_API_KEY else None
 )
 
-# API provider selection
-API_PROVIDER = os.getenv("PRICE_API_PROVIDER", "coingecko").lower()
-CMC_API_KEY = os.getenv("COINMARKETCAP_API_KEY")
-CMC_HEADERS = {"X-CMC_PRO_API_KEY": CMC_API_KEY} if CMC_API_KEY else None
+# CoinGecko is the sole API provider
 
 # emojis used for price movements
 UP_ARROW = "\U0001f53a"  # up triangle
@@ -519,21 +516,9 @@ async def get_price(
     if cached and now - cached[1] < 60:
         return cached[0]
 
-    if API_PROVIDER == "coinmarketcap":
-        symbol = symbol_for(coin)
-        url = (
-            "https://pro-api.coinmarketcap.com/v1/cryptocurrency/quotes/latest"
-            f"?symbol={symbol}"
-        )
-        headers = CMC_HEADERS
-        key = symbol
-    else:
-        url = (
-            f"{COINGECKO_BASE_URL}/simple/price"
-            f"?ids={encoded(coin)}&vs_currencies=usd"
-        )
-        headers = COINGECKO_HEADERS
-        key = coin
+    url = f"{COINGECKO_BASE_URL}/simple/price" f"?ids={encoded(coin)}&vs_currencies=usd"
+    headers = COINGECKO_HEADERS
+    key = coin
 
     retries = 3
     owns_session = session is None
@@ -546,12 +531,7 @@ async def get_price(
                 return None
             if resp.status == 200:
                 data = await resp.json()
-                if API_PROVIDER == "coinmarketcap":
-                    info = data.get("data", {}).get(symbol, {})
-                    quote = info.get("quote", {}).get("USD", {})
-                    price = quote.get("price")
-                else:
-                    price = data.get(key, {}).get("usd")
+                price = data.get(key, {}).get("usd")
                 if price is not None:
                     price = float(price)
                     PRICE_CACHE[coin] = (price, time.time())
@@ -571,20 +551,6 @@ async def get_prices(
     user: Optional[int] = None,
 ) -> dict[str, float]:
     """Return USD prices for multiple coins."""
-    if API_PROVIDER != "coingecko":
-        result: dict[str, float] = {}
-        owns_session = session is None
-        if owns_session:
-            session = aiohttp.ClientSession()
-        try:
-            for coin in coins:
-                price = await get_price(coin, session=session, user=user)
-                if price is not None:
-                    result[coin] = price
-        finally:
-            if owns_session and session:
-                await session.close()
-        return result
 
     url = (
         f"{COINGECKO_BASE_URL}/simple/price"
@@ -627,17 +593,8 @@ async def get_coin_info(
     user: Optional[int] = None,
 ) -> tuple[Optional[dict], Optional[str]]:
     """Return detailed coin info."""
-    # Support both API providers for detailed data
-    if API_PROVIDER == "coinmarketcap":
-        symbol = symbol_for(coin)
-        url = (
-            "https://pro-api.coinmarketcap.com/v1/cryptocurrency/quotes/latest"
-            f"?symbol={symbol}"
-        )
-        headers = CMC_HEADERS
-    else:
-        url = f"{COINGECKO_BASE_URL}/coins/{encoded(coin)}"
-        headers = COINGECKO_HEADERS
+    url = f"{COINGECKO_BASE_URL}/coins/{encoded(coin)}"
+    headers = COINGECKO_HEADERS
 
     owns_session = session is None
     if owns_session:
@@ -649,23 +606,6 @@ async def get_coin_info(
                 return None, "request failed"
             if resp.status == 200:
                 data = await resp.json()
-                if API_PROVIDER == "coinmarketcap":
-                    info = data.get("data", {}).get(symbol, {})
-                    quote = info.get("quote", {}).get("USD", {})
-                    return (
-                        {
-                            "name": info.get("name"),
-                            "symbol": info.get("symbol"),
-                            "market_data": {
-                                "current_price": {"usd": quote.get("price")},
-                                "market_cap": {"usd": quote.get("market_cap")},
-                                "price_change_percentage_24h": quote.get(
-                                    "percent_change_24h"
-                                ),
-                            },
-                        },
-                        None,
-                    )
                 return data, None
             if resp.status == 404:
                 return None, "coin not found"
@@ -725,20 +665,12 @@ async def get_market_info(
     user: Optional[int] = None,
 ) -> Optional[dict]:
     """Return basic market info for a coin."""
-    # Fetch a small subset of data used in alerts and listings
-    if API_PROVIDER == "coinmarketcap":
-        symbol = symbol_for(coin)
-        url = (
-            "https://pro-api.coinmarketcap.com/v1/cryptocurrency/quotes/latest"
-            f"?symbol={symbol}"
-        )
-        headers = CMC_HEADERS
-    else:
-        url = (
-            f"{COINGECKO_BASE_URL}/coins/markets"
-            f"?vs_currency=usd&ids={encoded(coin)}&price_change_percentage=24h"
-        )
-        headers = COINGECKO_HEADERS
+    # Fetch a small subset of data used in alerts and listings from CoinGecko
+    url = (
+        f"{COINGECKO_BASE_URL}/coins/markets"
+        f"?vs_currency=usd&ids={encoded(coin)}&price_change_percentage=24h"
+    )
+    headers = COINGECKO_HEADERS
 
     owns_session = session is None
     if owns_session:
@@ -749,14 +681,6 @@ async def get_market_info(
             return None
         if resp.status == 200:
             data = await resp.json()
-            if API_PROVIDER == "coinmarketcap":
-                info = data.get("data", {}).get(symbol, {})
-                quote = info.get("quote", {}).get("USD", {})
-                return {
-                    "current_price": quote.get("price"),
-                    "market_cap": quote.get("market_cap"),
-                    "price_change_percentage_24h": quote.get("percent_change_24h"),
-                }
             if data:
                 return data[0]
     finally:
@@ -776,19 +700,11 @@ async def get_market_chart(
     # Convert ``days`` to a timestamp range for the provider API
     end_ts = int(time.time())
     start_ts = end_ts - days * 86400
-    if API_PROVIDER == "coinmarketcap":
-        symbol = symbol_for(coin)
-        url = (
-            "https://pro-api.coinmarketcap.com/v2/cryptocurrency/ohlcv/historical"
-            f"?symbol={symbol}&time_start={start_ts}&time_end={end_ts}"
-        )
-        headers = CMC_HEADERS
-    else:
-        url = (
-            f"{COINGECKO_BASE_URL}/coins/{encoded(coin)}/market_chart/range"
-            f"?vs_currency=usd&from={start_ts}&to={end_ts}"
-        )
-        headers = COINGECKO_HEADERS
+    url = (
+        f"{COINGECKO_BASE_URL}/coins/{encoded(coin)}/market_chart/range"
+        f"?vs_currency=usd&from={start_ts}&to={end_ts}"
+    )
+    headers = COINGECKO_HEADERS
     owns_session = session is None
     if owns_session:
         session = aiohttp.ClientSession()
@@ -798,15 +714,6 @@ async def get_market_chart(
             return None, "request failed"
         if resp.status == 200:
             data = await resp.json()
-            if API_PROVIDER == "coinmarketcap":
-                quotes = data.get("data", {}).get("quotes", [])
-                return [
-                    (
-                        q.get("time_open", 0) / 1000,
-                        q.get("quote", {}).get("USD", {}).get("close"),
-                    )
-                    for q in quotes
-                ], None
             return [(p[0] / 1000, p[1]) for p in data.get("prices", [])], None
         if resp.status == 404:
             return None, "coin not found"
@@ -822,13 +729,9 @@ async def get_global_overview(
     user: Optional[int] = None,
 ) -> tuple[Optional[dict], Optional[str]]:
     """Return global market data."""
-    # Used by the /global command
-    if API_PROVIDER == "coinmarketcap":
-        url = "https://pro-api.coinmarketcap.com/v1/global-metrics/quotes/latest"
-        headers = CMC_HEADERS
-    else:
-        url = f"{COINGECKO_BASE_URL}/global"
-        headers = COINGECKO_HEADERS
+    # Used by the /global command, always via CoinGecko
+    url = f"{COINGECKO_BASE_URL}/global"
+    headers = COINGECKO_HEADERS
     owns_session = session is None
     if owns_session:
         session = aiohttp.ClientSession()
@@ -839,24 +742,6 @@ async def get_global_overview(
                 return None, "request failed"
             if resp.status == 200:
                 data = await resp.json()
-                if API_PROVIDER == "coinmarketcap":
-                    quote = data.get("data", {}).get("quote", {}).get("USD", {})
-                    btc_dominance = data.get("data", {}).get("btc_dominance")
-                    return (
-                        {
-                            "data": {
-                                "total_market_cap": {
-                                    "usd": quote.get("total_market_cap")
-                                },
-                                "total_volume": {"usd": quote.get("total_volume_24h")},
-                                "market_cap_percentage": {"btc": btc_dominance},
-                                "market_cap_change_percentage_24h_usd": quote.get(
-                                    "percent_change_24h"
-                                ),
-                            }
-                        },
-                        None,
-                    )
                 return data, None
             await asyncio.sleep(2**attempt)
         return None, f"HTTP {resp.status}"
@@ -997,7 +882,7 @@ async def check_prices(app) -> None:
 
     coins = list(by_coin.keys())
     prices: Dict[str, float] = {}
-    if API_PROVIDER == "coingecko" and len(coins) > 1:
+    if len(coins) > 1:
         groups = [coins[i : i + 250] for i in range(0, len(coins), 250)]  # noqa: E203
         async with aiohttp.ClientSession() as session:
             for group in groups:

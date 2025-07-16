@@ -39,8 +39,6 @@ Create `.env` and `config.json` files from the provided examples. The env file h
 - `DB_PATH` – SQLite database path (default `subs.db`)
 - `COINGECKO_API_KEY` – optional CoinGecko key
 - `COINGECKO_BASE_URL` – override to use the pro CoinGecko endpoint
-- `PRICE_API_PROVIDER` – `coingecko` or `coinmarketcap`
-- `COINMARKETCAP_API_KEY` – optional CoinMarketCap key
 - `LOG_LEVEL` – log level such as INFO
 - `LOG_FILE` – file to write logs to
 
