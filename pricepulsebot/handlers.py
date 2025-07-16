@@ -530,7 +530,8 @@ async def valuearea_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE) -> N
             f"{ERROR_EMOJI} Usage: /valuearea <symbol> <interval> <count>"
         )
         return
-    symbol = context.args[0].upper()
+    symbol_input = context.args[0]
+    symbol = await api.resolve_pair(symbol_input, user=update.effective_chat.id)
     interval = context.args[1]
     try:
         limit = int(context.args[2])
