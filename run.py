@@ -22,13 +22,24 @@ from aiolimiter import AsyncLimiter
 from apscheduler.schedulers.asyncio import AsyncIOScheduler
 from dotenv import load_dotenv
 from matplotlib import pyplot as plt
-from telegram import (Bot, BotCommand, InlineKeyboardButton,
-                      InlineKeyboardMarkup, KeyboardButton,
-                      ReplyKeyboardMarkup, Update)
+from telegram import (
+    Bot,
+    BotCommand,
+    InlineKeyboardButton,
+    InlineKeyboardMarkup,
+    KeyboardButton,
+    ReplyKeyboardMarkup,
+    Update,
+)
 from telegram.constants import ChatAction
-from telegram.ext import (ApplicationBuilder, CallbackQueryHandler,
-                          CommandHandler, ContextTypes, MessageHandler,
-                          filters)
+from telegram.ext import (
+    ApplicationBuilder,
+    CallbackQueryHandler,
+    CommandHandler,
+    ContextTypes,
+    MessageHandler,
+    filters,
+)
 
 matplotlib.use("Agg")
 
@@ -196,6 +207,20 @@ async def find_coin(query: str) -> Optional[str]:
                     return coin_id
     except aiohttp.ClientError as exc:
         logger.warning("search failed: %s", exc)
+    return None
+
+
+async def resolve_coin(query: str, user: Optional[int] = None) -> Optional[str]:
+    """Return coin id for a given name, id or symbol."""
+    coin = normalize_coin(query)
+    info = await get_market_info(coin, user=user)
+    if info and info.get("current_price") is not None:
+        return coin
+    alt = await find_coin(query)
+    if alt:
+        info = await get_market_info(alt, user=user)
+        if info and info.get("current_price") is not None:
+            return alt
     return None
 
 
@@ -1098,14 +1123,8 @@ async def subscribe_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE) -> N
         )
         return
     coin_input = context.args[0]
-    coin = normalize_coin(coin_input)
-    info = await get_market_info(coin, user=update.effective_chat.id)
-    if not info or info.get("current_price") is None:
-        alt = await find_coin(coin_input)
-        if alt:
-            coin = alt
-            info = await get_market_info(coin, user=update.effective_chat.id)
-    if not info or info.get("current_price") is None:
+    coin = await resolve_coin(coin_input, user=update.effective_chat.id)
+    if not coin:
         suggestions = suggest_coins(coin_input)
         msg = f"{ERROR_EMOJI} Unknown coin"
         if suggestions:
@@ -1242,7 +1261,16 @@ async def info_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     if not context.args:
         await update.message.reply_text(f"{ERROR_EMOJI} Usage: /info <coin>")
         return
-    coin = normalize_coin(context.args[0])
+    coin_input = context.args[0]
+    coin = await resolve_coin(coin_input, user=update.effective_chat.id)
+    if not coin:
+        suggestions = suggest_coins(coin_input)
+        msg = f"{ERROR_EMOJI} Unknown coin"
+        if suggestions:
+            syms = ", ".join(symbol_for(c) for c in suggestions)
+            msg += f". Did you mean {syms}?"
+        await update.message.reply_text(msg)
+        return
     data, err = await get_coin_info(coin, user=update.effective_chat.id)
     if err:
         await update.message.reply_text(f"{ERROR_EMOJI} {err}")
@@ -1273,7 +1301,16 @@ async def chart_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     if not context.args:
         await update.message.reply_text(f"{ERROR_EMOJI} Usage: /chart <coin> [days]")
         return
-    coin = normalize_coin(context.args[0])
+    coin_input = context.args[0]
+    coin = await resolve_coin(coin_input, user=update.effective_chat.id)
+    if not coin:
+        suggestions = suggest_coins(coin_input)
+        msg = f"{ERROR_EMOJI} Unknown coin"
+        if suggestions:
+            syms = ", ".join(symbol_for(c) for c in suggestions)
+            msg += f". Did you mean {syms}?"
+        await update.message.reply_text(msg)
+        return
     days = 7
     if len(context.args) > 1:
         try:

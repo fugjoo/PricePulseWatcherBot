@@ -1,0 +1,39 @@
+import os
+import sys
+
+sys.path.insert(0, os.path.dirname(os.path.dirname(__file__)))  # noqa: E402
+
+import pytest  # noqa: E402
+
+import run  # noqa: E402
+
+resolve_coin = run.resolve_coin
+
+
+@pytest.mark.asyncio
+async def test_resolve_coin_direct(monkeypatch):
+    async def fake_info(coin, user=None, session=None):
+        if coin == "bitcoin":
+            return {"current_price": 1.0}
+        return None
+
+    monkeypatch.setattr(run, "get_market_info", fake_info)
+    result = await resolve_coin("bitcoin")
+    assert result == "bitcoin"
+
+
+@pytest.mark.asyncio
+async def test_resolve_coin_fallback(monkeypatch):
+    async def fake_info(coin, user=None, session=None):
+        if coin == "ripple":
+            return {"current_price": 1.0}
+        return None
+
+    async def fake_find(query):
+        return "ripple"
+
+    monkeypatch.setattr(run, "get_market_info", fake_info)
+    monkeypatch.setattr(run, "find_coin", fake_find)
+
+    result = await resolve_coin("xrp")
+    assert result == "ripple"
