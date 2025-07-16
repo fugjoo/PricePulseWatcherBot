@@ -24,16 +24,18 @@ cp .env.example .env             # edit TELEGRAM_TOKEN
 # COINGECKO_BASE_URL sets the CoinGecko endpoint (use the pro URL if you have a paid plan)
 # LOG_LEVEL enables verbose output when set to DEBUG
 # LOG_FILE writes logs to the given file (default bot.log)
-cp config.json.example config.json
+# DEFAULT_THRESHOLD sets the default percent change for alerts
+# DEFAULT_INTERVAL sets the default subscription interval
+# PRICE_CHECK_INTERVAL controls how often prices are checked
 python run.py
 ```
 
-Adjust `config.json` to change the default threshold, subscription interval or
-price check frequency. Start the bot and run `/start` in a chat with it.
+Edit `.env` to change the default threshold, subscription interval or price
+check frequency. Start the bot and run `/start` in a chat with it.
 
 ## Configuration
 
-Create `.env` and `config.json` files from the provided examples. The env file holds credentials and runtime options:
+Create `.env` from the provided example. This file holds credentials and runtime options:
 
 - `TELEGRAM_TOKEN` – token from BotFather
 - `DB_PATH` – SQLite database path (default `subs.db`)
@@ -41,12 +43,9 @@ Create `.env` and `config.json` files from the provided examples. The env file h
 - `COINGECKO_BASE_URL` – override to use the pro CoinGecko endpoint
 - `LOG_LEVEL` – log level such as INFO
 - `LOG_FILE` – file to write logs to
-
-`config.json` contains defaults controlling alert behaviour:
-
-- `default_threshold` – percent change that triggers an alert
-- `default_interval` – subscription interval when none is given
-- `price_check_interval` – how often prices are checked
+- `DEFAULT_THRESHOLD` – percent change that triggers an alert
+- `DEFAULT_INTERVAL` – subscription interval when none is given
+- `PRICE_CHECK_INTERVAL` – how often prices are checked
 
 ### Commands
 

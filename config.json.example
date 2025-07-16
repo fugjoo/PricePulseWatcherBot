@@ -1,5 +1,0 @@
-{
-  "default_threshold": 0.1,
-  "default_interval": "5m",
-  "price_check_interval": "30s"
-}
