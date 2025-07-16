@@ -389,7 +389,7 @@ async def fetch_trending_coins() -> Optional[list[dict]]:
             if not resp or resp.status != 200:
                 raise RuntimeError(getattr(resp, "status", "n/a"))
             data = await resp.json()
-            trending: list[dict] = []
+            infos: list[tuple[str, Optional[str], Optional[str]]] = []
             ids: list[str] = []
             for c in data.get("coins", [])[:10]:
                 item = c.get("item", {})
@@ -399,12 +399,27 @@ async def fetch_trending_coins() -> Optional[list[dict]]:
                 if not coin_id:
                     continue
                 ids.append(coin_id)
+                infos.append((coin_id, symbol, name))
                 if symbol:
                     config.COIN_SYMBOLS[coin_id] = symbol.upper()
                     config.SYMBOL_TO_COIN[symbol.lower()] = coin_id
-                market = (
-                    await get_market_info(coin_id, session=session, user=None) or {}
+
+            markets: dict[str, dict] = {}
+            if ids:
+                markets_url = (
+                    f"{config.COINGECKO_BASE_URL}/coins/markets"
+                    f"?vs_currency=usd&ids={','.join(ids)}&price_change_percentage=24h"
                 )
+                market_resp = await api_get(
+                    markets_url, session=session, headers=config.COINGECKO_HEADERS
+                )
+                if market_resp and market_resp.status == 200:
+                    data = await market_resp.json()
+                    markets = {m.get("id"): m for m in data}
+
+            trending: list[dict] = []
+            for coin_id, symbol, name in infos:
+                market = markets.get(coin_id, {})
                 trending.append(
                     {
                         "id": coin_id,
@@ -414,7 +429,11 @@ async def fetch_trending_coins() -> Optional[list[dict]]:
                         "change_24h": market.get("price_change_percentage_24h"),
                     }
                 )
+
             if trending:
+                trending.sort(
+                    key=lambda x: (x["change_24h"] is None, -(x["change_24h"] or 0))
+                )
                 config.COINS = ids
                 await db.set_trending_coins(trending)
                 return trending
@@ -431,6 +450,7 @@ async def fetch_trending_coins() -> Optional[list[dict]]:
                 config.COIN_SYMBOLS[coin_id] = symbol.upper()
                 config.SYMBOL_TO_COIN[symbol.lower()] = coin_id
         config.COINS = [c.get("id") for c in cached if c.get("id")]
+        cached.sort(key=lambda x: (x["change_24h"] is None, -(x["change_24h"] or 0)))
         return cached
     return None
 

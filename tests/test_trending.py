@@ -17,8 +17,10 @@ async def test_fetch_trending_coins_cached(tmp_path, monkeypatch):
             "GET",
             Response(
                 text=(
-                    '{"coins": [{"item": {"id": "solana", "symbol": "sol", '
-                    '"name": "Solana"}}]}'
+                    '{"coins": ['
+                    '{"item": {"id": "solana", "symbol": "sol", "name": "Solana"}},'
+                    '{"item": {"id": "bitcoin", "symbol": "btc", "name": "Bitcoin"}}'
+                    "]}"
                 ),
                 status=200,
                 headers={"Content-Type": "application/json"},
@@ -31,7 +33,9 @@ async def test_fetch_trending_coins_cached(tmp_path, monkeypatch):
             Response(
                 text=(
                     '[{"id": "solana", "current_price": 1.0, '
-                    '"price_change_percentage_24h": 2.0}]'
+                    '"price_change_percentage_24h": 2.0},'
+                    '{"id": "bitcoin", "current_price": 2.0, '
+                    '"price_change_percentage_24h": 1.0}]'
                 ),
                 status=200,
                 headers={"Content-Type": "application/json"},
@@ -49,4 +53,4 @@ async def test_fetch_trending_coins_cached(tmp_path, monkeypatch):
     config.COINS = []
     again = await api.fetch_trending_coins()
     assert again == cached
-    assert config.COINS == ["solana"]
+    assert config.COINS == ["solana", "bitcoin"]
