@@ -26,7 +26,7 @@ def encoded(coin: str) -> str:
     return quote(coin, safe="-")
 
 
-def suggest_coins(name: str, limit: int = 3) -> list[str]:
+async def suggest_coins(name: str, limit: int = 3) -> list[str]:
     candidates = list(
         {
             *config.COINS,
@@ -45,6 +45,11 @@ def suggest_coins(name: str, limit: int = 3) -> list[str]:
         if coin not in seen:
             seen.add(coin)
             result.append(coin)
+
+    if not matches:
+        found = await find_coin(name)
+        if found:
+            return [found]
     return result
 
 

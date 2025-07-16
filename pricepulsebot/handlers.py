@@ -286,7 +286,7 @@ async def subscribe_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE) -> N
     coin_input = context.args[0]
     coin = await api.resolve_coin(coin_input, user=update.effective_chat.id)
     if not coin:
-        suggestions = api.suggest_coins(coin_input)
+        suggestions = await api.suggest_coins(coin_input)
         msg = f"{ERROR_EMOJI} Unknown coin"
         if suggestions:
             syms = ", ".join(api.symbol_for(c) for c in suggestions)
@@ -386,7 +386,7 @@ async def info_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     coin_input = context.args[0]
     coin = await api.resolve_coin(coin_input, user=update.effective_chat.id)
     if not coin:
-        suggestions = api.suggest_coins(coin_input)
+        suggestions = await api.suggest_coins(coin_input)
         msg = f"{ERROR_EMOJI} Unknown coin"
         if suggestions:
             syms = ", ".join(api.symbol_for(c) for c in suggestions)
@@ -424,7 +424,7 @@ async def chart_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     coin_input = context.args[0]
     coin = await api.resolve_coin(coin_input, user=update.effective_chat.id)
     if not coin:
-        suggestions = api.suggest_coins(coin_input)
+        suggestions = await api.suggest_coins(coin_input)
         msg = f"{ERROR_EMOJI} Unknown coin"
         if suggestions:
             syms = ", ".join(api.symbol_for(c) for c in suggestions)
