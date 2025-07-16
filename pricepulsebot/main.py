@@ -16,7 +16,6 @@ from . import api, config, db, handlers
 
 
 async def main() -> None:
-    config.load_config()
     await db.init_db()
     await api.fetch_trending_coins()
     await api.fetch_top_coins()
