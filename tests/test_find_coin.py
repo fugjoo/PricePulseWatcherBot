@@ -38,3 +38,24 @@ async def test_find_coin_encodes_query():
         )
         result = await find_coin("bitcoin cash")
         assert result is None
+
+
+@pytest.mark.asyncio
+async def test_find_coin_matches_id():
+    async with ResponsesMockServer() as ars:
+        ars.add(
+            "api.coingecko.com",
+            "/api/v3/search",
+            "GET",
+            Response(
+                text=(
+                    '{"coins": [{"id": "bitcoin", "symbol": "btc", '
+                    '"name": "Bitcoin"}]}'
+                ),
+                status=200,
+                headers={"Content-Type": "application/json"},
+            ),
+        )
+        result = await find_coin("bitcoin")
+        assert result == "bitcoin"
+        assert api.config.SYMBOL_TO_COIN["btc"] == "bitcoin"
