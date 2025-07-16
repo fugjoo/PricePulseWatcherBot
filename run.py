@@ -1528,6 +1528,9 @@ async def menu(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
             text="\u200b",
             reply_markup=get_keyboard(),
         )
+        # allow time for Telegram to apply the new keyboard before removing the
+        # temporary message
+        await asyncio.sleep(0.5)
         await context.bot.delete_message(
             chat_id=update.effective_chat.id,
             message_id=msg.message_id,
