@@ -16,19 +16,37 @@ async def test_fetch_trending_coins_cached(tmp_path, monkeypatch):
             "/api/v3/search/trending",
             "GET",
             Response(
-                text='{"coins": [{"item": {"id": "solana", "symbol": "sol"}}]}',
+                text=(
+                    '{"coins": [{"item": {"id": "solana", "symbol": "sol", '
+                    '"name": "Solana"}}]}'
+                ),
                 status=200,
                 headers={"Content-Type": "application/json"},
             ),
         )
-        await api.fetch_trending_coins()
+        ars.add(
+            "api.coingecko.com",
+            "/api/v3/coins/markets",
+            "GET",
+            Response(
+                text=(
+                    '[{"id": "solana", "current_price": 1.0, '
+                    '"price_change_percentage_24h": 2.0}]'
+                ),
+                status=200,
+                headers={"Content-Type": "application/json"},
+            ),
+        )
+        trending = await api.fetch_trending_coins()
     cached = await db.get_trending_coins()
-    assert cached == ["solana"]
+    assert cached == trending
+    assert cached[0]["id"] == "solana"
 
     async def fail(*args, **kwargs):
         return None
 
     monkeypatch.setattr(api, "api_get", fail)
     config.COINS = []
-    await api.fetch_trending_coins()
+    again = await api.fetch_trending_coins()
+    assert again == cached
     assert config.COINS == ["solana"]
