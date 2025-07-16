@@ -26,6 +26,19 @@ def encoded(coin: str) -> str:
     return quote(coin, safe="-")
 
 
+async def resolve_pair(
+    value: str, quote: str = "USDT", *, user: Optional[int] = None
+) -> str:
+    """Return a Binance trading pair for a coin or symbol."""
+    pair = value.replace("/", "").upper()
+    quotes = ("USDT", "BUSD", "USDC", "USD", "BNB", "TRY", "EUR")
+    if any(pair.endswith(q) for q in quotes):
+        return pair
+    coin = await resolve_coin(value, user=user)
+    symbol = symbol_for(coin) if coin else pair
+    return f"{symbol}{quote}"
+
+
 async def suggest_coins(name: str, limit: int = 3) -> list[str]:
     candidates = list(
         {
