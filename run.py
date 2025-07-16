@@ -1061,7 +1061,6 @@ async def check_prices(app) -> None:
 
 
 SUB_EMOJI = "\U00002795"
-RELOAD_EMOJI = "\U000027f3"
 LIST_EMOJI = "\U0001f4cb"
 HELP_EMOJI = "\u2753"
 WELCOME_EMOJI = "\U0001f44b"
@@ -1077,7 +1076,6 @@ def get_keyboard() -> ReplyKeyboardMarkup:
     subs = [KeyboardButton(f"{SUB_EMOJI} Add {symbol_for(c)}") for c in coins]
     keyboard = [
         subs,
-        [KeyboardButton(RELOAD_EMOJI)],
         [KeyboardButton(f"{LIST_EMOJI} List"), KeyboardButton(f"{HELP_EMOJI} Help")],
     ]
     return ReplyKeyboardMarkup(
@@ -1516,25 +1514,6 @@ async def menu(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
                 f"{SUB_EMOJI} Subscribed to {symbol_for(coin)}",
                 reply_markup=get_keyboard(),
             )
-    elif text == RELOAD_EMOJI:
-        await context.bot.delete_message(
-            chat_id=update.effective_chat.id,
-            message_id=update.message.message_id,
-        )
-        # Send a short message with a new keyboard then delete it so the
-        # persistent keyboard gets updated without cluttering the chat
-        msg = await context.bot.send_message(
-            chat_id=update.effective_chat.id,
-            text="\u200b",
-            reply_markup=get_keyboard(),
-        )
-        # allow time for Telegram to apply the new keyboard before removing the
-        # temporary message
-        await asyncio.sleep(0.5)
-        await context.bot.delete_message(
-            chat_id=update.effective_chat.id,
-            message_id=msg.message_id,
-        )
     elif text == f"{LIST_EMOJI} List":
         await list_cmd(update, context)
     elif text == f"{HELP_EMOJI} Help":
