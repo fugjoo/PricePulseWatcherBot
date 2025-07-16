@@ -351,11 +351,15 @@ async def resolve_coin(query: str, user: Optional[int] = None) -> Optional[str]:
     info = await get_market_info(coin, user=user)
     if info and info.get("current_price") is not None:
         return coin
-    alt = await find_coin(query)
-    if alt:
+
+    for candidate in (coin, query):
+        alt = await find_coin(candidate)
+        if not alt:
+            continue
         info = await get_market_info(alt, user=user)
         if info and info.get("current_price") is not None:
             return alt
+
     return None
 
 

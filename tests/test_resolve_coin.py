@@ -32,3 +32,24 @@ async def test_resolve_coin_fallback(monkeypatch):
 
     result = await resolve_coin("xrp")
     assert result == "ripple"
+
+
+@pytest.mark.asyncio
+async def test_resolve_coin_symbol_search(monkeypatch):
+    async def fake_info(coin, user=None, session=None):
+        if coin == "litecoin-cash":
+            return {"current_price": 1.0}
+        return None
+
+    async def fake_find(query):
+        if query == "litecoin":
+            return None
+        if query == "ltc":
+            return "litecoin-cash"
+        return None
+
+    monkeypatch.setattr(api, "get_market_info", fake_info)
+    monkeypatch.setattr(api, "find_coin", fake_find)
+
+    result = await resolve_coin("ltc")
+    assert result == "litecoin-cash"
