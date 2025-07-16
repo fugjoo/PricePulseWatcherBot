@@ -12,6 +12,7 @@ from decimal import Decimal
 from difflib import get_close_matches
 from io import BytesIO
 from typing import Deque, Dict, Optional, Tuple
+from urllib.parse import quote
 
 import aiohttp
 import aiosqlite
@@ -21,24 +22,13 @@ from aiolimiter import AsyncLimiter
 from apscheduler.schedulers.asyncio import AsyncIOScheduler
 from dotenv import load_dotenv
 from matplotlib import pyplot as plt
-from telegram import (
-    Bot,
-    BotCommand,
-    InlineKeyboardButton,
-    InlineKeyboardMarkup,
-    KeyboardButton,
-    ReplyKeyboardMarkup,
-    Update,
-)
+from telegram import (Bot, BotCommand, InlineKeyboardButton,
+                      InlineKeyboardMarkup, KeyboardButton,
+                      ReplyKeyboardMarkup, Update)
 from telegram.constants import ChatAction
-from telegram.ext import (
-    ApplicationBuilder,
-    CallbackQueryHandler,
-    CommandHandler,
-    ContextTypes,
-    MessageHandler,
-    filters,
-)
+from telegram.ext import (ApplicationBuilder, CallbackQueryHandler,
+                          CommandHandler, ContextTypes, MessageHandler,
+                          filters)
 
 matplotlib.use("Agg")
 
@@ -146,6 +136,11 @@ def normalize_coin(value: str) -> str:
     """Return the coin ID for a given symbol or coin name."""
     # Resolve both symbol and coin name to a canonical id
     return SYMBOL_TO_COIN.get(value.lower(), value.lower())
+
+
+def encoded(coin: str) -> str:
+    """Return a URL-encoded coin identifier."""
+    return quote(coin, safe="-")
 
 
 def suggest_coins(name: str, limit: int = 3) -> list[str]:
@@ -508,7 +503,7 @@ async def get_price(
     else:
         url = (
             "https://api.coingecko.com/api/v3/simple/price"
-            f"?ids={coin}&vs_currencies=usd"
+            f"?ids={encoded(coin)}&vs_currencies=usd"
         )
         headers = COINGECKO_HEADERS
         key = coin
@@ -566,7 +561,7 @@ async def get_prices(
 
     url = (
         "https://api.coingecko.com/api/v3/simple/price"
-        f"?ids={','.join(coins)}&vs_currencies=usd"
+        f"?ids={','.join(encoded(c) for c in coins)}&vs_currencies=usd"
     )
     retries = 3
     owns_session = session is None
@@ -614,7 +609,7 @@ async def get_coin_info(
         )
         headers = CMC_HEADERS
     else:
-        url = f"https://api.coingecko.com/api/v3/coins/{coin}"
+        url = f"https://api.coingecko.com/api/v3/coins/{encoded(coin)}"
         headers = COINGECKO_HEADERS
 
     owns_session = session is None
@@ -714,7 +709,7 @@ async def get_market_info(
     else:
         url = (
             "https://api.coingecko.com/api/v3/coins/markets"
-            f"?vs_currency=usd&ids={coin}&price_change_percentage=24h"
+            f"?vs_currency=usd&ids={encoded(coin)}&price_change_percentage=24h"
         )
         headers = COINGECKO_HEADERS
 
@@ -744,7 +739,11 @@ async def get_market_info(
 
 
 async def get_market_chart(
-    coin: str, days: int, session: Optional[aiohttp.ClientSession] = None
+    coin: str,
+    days: int,
+    session: Optional[aiohttp.ClientSession] = None,
+    *,
+    user: Optional[int] = None,
 ) -> tuple[Optional[list[tuple[float, float]]], Optional[str]]:
     """Return historical price chart data for a coin."""
     # Convert ``days`` to a timestamp range for the provider API
@@ -759,7 +758,7 @@ async def get_market_chart(
         headers = CMC_HEADERS
     else:
         url = (
-            f"https://api.coingecko.com/api/v3/coins/{coin}/market_chart/range"
+            f"https://api.coingecko.com/api/v3/coins/{encoded(coin)}/market_chart/range"
             f"?vs_currency=usd&from={start_ts}&to={end_ts}"
         )
         headers = COINGECKO_HEADERS
@@ -767,7 +766,7 @@ async def get_market_chart(
     if owns_session:
         session = aiohttp.ClientSession()
     try:
-        resp = await api_get(url, session=session, headers=headers)
+        resp = await api_get(url, session=session, headers=headers, user=user)
         if not resp:
             return None, "request failed"
         if resp.status == 200:
