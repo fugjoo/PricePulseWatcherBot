@@ -17,6 +17,7 @@ import aiohttp
 import aiosqlite
 import matplotlib
 import numpy as np
+from aiolimiter import AsyncLimiter
 from apscheduler.schedulers.asyncio import AsyncIOScheduler
 from dotenv import load_dotenv
 from matplotlib import pyplot as plt
@@ -177,27 +178,27 @@ async def find_coin(query: str) -> Optional[str]:
     url = f"https://api.coingecko.com/api/v3/search?query={query}"
     try:
         async with aiohttp.ClientSession() as session:
-            async with session.get(url, headers=COINGECKO_HEADERS) as resp:
-                if resp.status != 200:
-                    return None
-                data = await resp.json()
-                for item in data.get("coins", []):
-                    symbol = item.get("symbol")
-                    coin_id = item.get("id")
-                    name = item.get("name")
-                    if symbol and coin_id and symbol.lower() == query.lower():
+            resp = await api_get(url, session=session, headers=COINGECKO_HEADERS)
+            if not resp or resp.status != 200:
+                return None
+            data = await resp.json()
+            for item in data.get("coins", []):
+                symbol = item.get("symbol")
+                coin_id = item.get("id")
+                name = item.get("name")
+                if symbol and coin_id and symbol.lower() == query.lower():
+                    COIN_SYMBOLS[coin_id] = symbol.upper()
+                    SYMBOL_TO_COIN[symbol.lower()] = coin_id
+                    return coin_id
+            for item in data.get("coins", []):
+                symbol = item.get("symbol")
+                coin_id = item.get("id")
+                name = item.get("name", "")
+                if coin_id and name.lower() == query.lower():
+                    if symbol:
                         COIN_SYMBOLS[coin_id] = symbol.upper()
                         SYMBOL_TO_COIN[symbol.lower()] = coin_id
-                        return coin_id
-                for item in data.get("coins", []):
-                    symbol = item.get("symbol")
-                    coin_id = item.get("id")
-                    name = item.get("name", "")
-                    if coin_id and name.lower() == query.lower():
-                        if symbol:
-                            COIN_SYMBOLS[coin_id] = symbol.upper()
-                            SYMBOL_TO_COIN[symbol.lower()] = coin_id
-                        return coin_id
+                    return coin_id
     except aiohttp.ClientError as exc:
         logger.warning("search failed: %s", exc)
     return None
@@ -209,24 +210,27 @@ async def fetch_trending_coins() -> None:
     url = "https://api.coingecko.com/api/v3/search/trending"
     try:
         async with aiohttp.ClientSession() as session:
-            async with session.get(url, headers=COINGECKO_HEADERS) as resp:
-                if resp.status != 200:
-                    logger.warning("trending request failed: %s", resp.status)
-                    return
-                data = await resp.json()
-                coins: list[str] = []
-                for c in data.get("coins", [])[:10]:
-                    item = c.get("item", {})
-                    coin_id = item.get("id")
-                    symbol = item.get("symbol")
-                    if coin_id:
-                        coins.append(coin_id)
-                        if symbol:
-                            COIN_SYMBOLS[coin_id] = symbol.upper()
-                            SYMBOL_TO_COIN[symbol.lower()] = coin_id
-                if coins:
-                    global COINS
-                    COINS = coins
+            resp = await api_get(url, session=session, headers=COINGECKO_HEADERS)
+            if not resp or resp.status != 200:
+                logger.warning(
+                    "trending request failed: %s",
+                    getattr(resp, "status", "n/a"),
+                )
+                return
+            data = await resp.json()
+            coins: list[str] = []
+            for c in data.get("coins", [])[:10]:
+                item = c.get("item", {})
+                coin_id = item.get("id")
+                symbol = item.get("symbol")
+                if coin_id:
+                    coins.append(coin_id)
+                    if symbol:
+                        COIN_SYMBOLS[coin_id] = symbol.upper()
+                        SYMBOL_TO_COIN[symbol.lower()] = coin_id
+            if coins:
+                global COINS
+                COINS = coins
     except aiohttp.ClientError as exc:
         logger.error("error fetching trending coins: %s", exc)
 
@@ -240,22 +244,25 @@ async def fetch_top_coins() -> None:
     )
     try:
         async with aiohttp.ClientSession() as session:
-            async with session.get(url, headers=COINGECKO_HEADERS) as resp:
-                if resp.status != 200:
-                    logger.warning("top coins request failed: %s", resp.status)
-                    return
-                data = await resp.json()
-                coins: list[str] = []
-                for item in data[:20]:
-                    coin_id = item.get("id")
-                    symbol = item.get("symbol")
-                    if coin_id:
-                        coins.append(coin_id)
-                        if symbol:
-                            COIN_SYMBOLS[coin_id] = symbol.upper()
-                            SYMBOL_TO_COIN[symbol.lower()] = coin_id
-                global TOP_COINS
-                TOP_COINS = coins
+            resp = await api_get(url, session=session, headers=COINGECKO_HEADERS)
+            if not resp or resp.status != 200:
+                logger.warning(
+                    "top coins request failed: %s",
+                    getattr(resp, "status", "n/a"),
+                )
+                return
+            data = await resp.json()
+            coins: list[str] = []
+            for item in data[:20]:
+                coin_id = item.get("id")
+                symbol = item.get("symbol")
+                if coin_id:
+                    coins.append(coin_id)
+                    if symbol:
+                        COIN_SYMBOLS[coin_id] = symbol.upper()
+                        SYMBOL_TO_COIN[symbol.lower()] = coin_id
+            global TOP_COINS
+            TOP_COINS = coins
     except aiohttp.ClientError as exc:
         logger.error("error fetching top coins: %s", exc)
 
@@ -274,8 +281,7 @@ logger = logging.getLogger(__name__)
 
 # price cache: coin -> (price, timestamp)
 PRICE_CACHE: Dict[str, Tuple[float, float]] = {}
-REQUEST_LOCK = asyncio.Lock()
-LAST_REQUEST = 0.0
+COINGECKO_LIMITER = AsyncLimiter(30, 60)
 
 # cache last observed price to avoid zero when API fails
 LAST_KNOWN_PRICE: Dict[str, float] = {}
@@ -299,19 +305,23 @@ async def api_get(
     if owns_session:
         session = aiohttp.ClientSession()
     try:
-        async with REQUEST_LOCK:
-            global LAST_REQUEST
-            wait = max(0, LAST_REQUEST + 1.2 - time.time())
-            if wait:
-                await asyncio.sleep(wait)
-            try:
+        limiter = COINGECKO_LIMITER if "coingecko.com" in url else None
+        for attempt in range(5):
+            if limiter:
+                async with limiter:
+                    resp = await session.get(url, headers=headers)
+            else:
                 resp = await session.get(url, headers=headers)
-            except aiohttp.ClientError as exc:
-                logger.error("api request failed: %s", exc)
-                return None
-            LAST_REQUEST = time.time()
-        logger.info("api_request user=%s url=%s status=%s", user, url, resp.status)
+            logger.info("api_request user=%s url=%s status=%s", user, url, resp.status)
+            if resp.status != 429:
+                return resp
+            retry_after = resp.headers.get("Retry-After")
+            wait = float(retry_after) if retry_after else 2**attempt
+            await asyncio.sleep(wait)
         return resp
+    except aiohttp.ClientError as exc:
+        logger.error("api request failed: %s", exc)
+        return None
     finally:
         if owns_session and session:
             await session.close()
