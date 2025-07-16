@@ -3,7 +3,7 @@ import sys
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(__file__)))
 
-from run import milestone_step, milestones_crossed  # noqa: E402
+from pricepulsebot.handlers import milestone_step, milestones_crossed  # noqa: E402
 
 
 def test_milestone_step():

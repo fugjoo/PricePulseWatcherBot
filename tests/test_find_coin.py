@@ -6,9 +6,9 @@ sys.path.insert(0, os.path.dirname(os.path.dirname(__file__)))  # noqa: E402
 import pytest  # noqa: E402
 from aresponses import Response, ResponsesMockServer  # noqa: E402
 
-import run  # noqa: E402
+import pricepulsebot.api as api  # noqa: E402
 
-find_coin = run.find_coin
+find_coin = api.find_coin
 
 
 @pytest.mark.asyncio
@@ -26,7 +26,7 @@ async def test_find_coin():
         )
         result = await find_coin("xrp")
         assert result == "ripple"
-        assert run.SYMBOL_TO_COIN["xrp"] == "ripple"
+        assert api.config.SYMBOL_TO_COIN["xrp"] == "ripple"
 
 
 @pytest.mark.asyncio

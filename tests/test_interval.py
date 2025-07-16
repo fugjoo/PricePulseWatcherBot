@@ -7,7 +7,10 @@ import pytest
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(__file__)))  # noqa: E402
 
-import run  # noqa: E402
+import pricepulsebot.api as api  # noqa: E402
+import pricepulsebot.config as config  # noqa: E402
+import pricepulsebot.db as db  # noqa: E402
+import pricepulsebot.handlers as handlers  # noqa: E402
 
 
 class DummyBot:
@@ -24,30 +27,30 @@ class DummyApp:
 
 
 def test_format_interval_basic():
-    assert run.format_interval(300) == "5m"
-    assert run.format_interval(3600) == "1h"
-    assert run.format_interval(45) == "45s"
-    assert run.format_interval(86400) == "1d"
+    assert config.format_interval(300) == "5m"
+    assert config.format_interval(3600) == "1h"
+    assert config.format_interval(45) == "45s"
+    assert config.format_interval(86400) == "1d"
 
 
 @pytest.mark.asyncio
 async def test_check_prices_interval_in_message(tmp_path, monkeypatch):
     db_file = tmp_path / "subs.db"
-    run.DB_FILE = str(db_file)
-    await run.init_db()
-    await run.subscribe_coin(1, "bitcoin", 0.1, 300)
-    async with aiosqlite.connect(run.DB_FILE) as db:
-        await db.execute(
+    config.DB_FILE = str(db_file)
+    await db.init_db()
+    await db.subscribe_coin(1, "bitcoin", 0.1, 300)
+    async with aiosqlite.connect(config.DB_FILE) as conn:
+        await conn.execute(
             "UPDATE subscriptions SET last_price=?, last_alert_ts=? WHERE id=1",
             (100.0, time.time() - 600),
         )
-        await db.commit()
+        await conn.commit()
 
     async def fake_price(coin, user=None):
         return 105.0
 
-    monkeypatch.setattr(run, "get_price", fake_price)
+    monkeypatch.setattr(api, "get_price", fake_price)
     bot = DummyBot()
     app = DummyApp(bot)
-    await run.check_prices(app)
-    assert run.format_interval(300) in bot.sent[0][1]
+    await handlers.check_prices(app)
+    assert config.format_interval(300) in bot.sent[0][1]

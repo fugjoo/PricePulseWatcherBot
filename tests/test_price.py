@@ -8,11 +8,11 @@ from importlib import reload  # noqa: E402
 import pytest  # noqa: E402
 from aresponses import Response, ResponsesMockServer  # noqa: E402
 
-import run  # noqa: E402
+import pricepulsebot.api as api  # noqa: E402
 
-PRICE_CACHE = run.PRICE_CACHE
-get_price = run.get_price
-get_prices = run.get_prices
+PRICE_CACHE = api.PRICE_CACHE
+get_price = api.get_price
+get_prices = api.get_prices
 
 
 @pytest.mark.asyncio
@@ -35,10 +35,10 @@ async def test_get_price():
 
 @pytest.mark.asyncio
 async def test_get_prices_batch(monkeypatch):
-    reload(run)
-    PRICE_CACHE = run.PRICE_CACHE
+    reload(api)
+    PRICE_CACHE = api.PRICE_CACHE
     PRICE_CACHE.clear()
-    get_prices = run.get_prices
+    get_prices = api.get_prices
     async with ResponsesMockServer() as ars:
         ars.add(
             "api.coingecko.com",

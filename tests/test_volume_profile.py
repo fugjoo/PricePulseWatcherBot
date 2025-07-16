@@ -3,7 +3,7 @@ import sys
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(__file__)))
 
-from run import calculate_volume_profile  # noqa: E402
+from pricepulsebot.handlers import calculate_volume_profile  # noqa: E402
 
 
 def test_calculate_volume_profile_basic():
