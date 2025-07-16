@@ -65,4 +65,6 @@ logging.basicConfig(
     handlers=_handlers,
     force=True,
 )
+logging.getLogger("httpx").setLevel(logging.WARNING)
+logging.getLogger("httpcore").setLevel(logging.WARNING)
 logger = logging.getLogger(__name__)
