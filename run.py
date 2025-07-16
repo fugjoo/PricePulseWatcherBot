@@ -532,6 +532,62 @@ async def get_price(
     return LAST_KNOWN_PRICE.get(coin)
 
 
+async def get_prices(
+    coins: list[str],
+    session: Optional[aiohttp.ClientSession] = None,
+    *,
+    user: Optional[int] = None,
+) -> dict[str, float]:
+    """Return USD prices for multiple coins."""
+    if API_PROVIDER != "coingecko":
+        result: dict[str, float] = {}
+        owns_session = session is None
+        if owns_session:
+            session = aiohttp.ClientSession()
+        try:
+            for coin in coins:
+                price = await get_price(coin, session=session, user=user)
+                if price is not None:
+                    result[coin] = price
+        finally:
+            if owns_session and session:
+                await session.close()
+        return result
+
+    url = (
+        "https://api.coingecko.com/api/v3/simple/price"
+        f"?ids={','.join(coins)}&vs_currencies=usd"
+    )
+    retries = 3
+    owns_session = session is None
+    if owns_session:
+        session = aiohttp.ClientSession()
+    try:
+        for attempt in range(retries):
+            resp = await api_get(
+                url, session=session, headers=COINGECKO_HEADERS, user=user
+            )
+            if not resp:
+                return {}
+            if resp.status == 200:
+                data = await resp.json()
+                now = time.time()
+                result = {}
+                for coin in coins:
+                    price = data.get(coin, {}).get("usd")
+                    if price is not None:
+                        price = float(price)
+                        PRICE_CACHE[coin] = (price, now)
+                        LAST_KNOWN_PRICE[coin] = price
+                        result[coin] = price
+                return result
+            await asyncio.sleep(2**attempt)
+    finally:
+        if owns_session and session:
+            await session.close()
+    return {}
+
+
 async def get_coin_info(
     coin: str,
     session: Optional[aiohttp.ClientSession] = None,
@@ -903,8 +959,21 @@ async def check_prices(app) -> None:
             (sub_id, chat_id, threshold, interval, last_price, last_ts)
         )
 
+    coins = list(by_coin.keys())
+    prices: Dict[str, float] = {}
+    if API_PROVIDER == "coingecko" and len(coins) > 1:
+        groups = [coins[i : i + 250] for i in range(0, len(coins), 250)]  # noqa: E203
+        async with aiohttp.ClientSession() as session:
+            for group in groups:
+                prices.update(await get_prices(group, session=session, user=None))
+    else:
+        for coin in coins:
+            price = await get_price(coin, user=None)
+            if price is not None:
+                prices[coin] = price
+
     for coin, subscriptions in by_coin.items():
-        price = await get_price(coin, user=None)
+        price = prices.get(coin)
         if price is None:
             continue
         for sub_id, chat_id, threshold, interval, last_price, last_ts in subscriptions:

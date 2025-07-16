@@ -12,6 +12,7 @@ import run  # noqa: E402
 
 PRICE_CACHE = run.PRICE_CACHE
 get_price = run.get_price
+get_prices = run.get_prices
 
 
 @pytest.mark.asyncio
@@ -52,3 +53,25 @@ async def test_get_price_coinmarketcap(monkeypatch):
         )
         price = await get_price("bitcoin")
         assert price == 6.0
+
+
+@pytest.mark.asyncio
+async def test_get_prices_batch(monkeypatch):
+    monkeypatch.delenv("PRICE_API_PROVIDER", raising=False)
+    reload(run)
+    PRICE_CACHE = run.PRICE_CACHE
+    PRICE_CACHE.clear()
+    get_prices = run.get_prices
+    async with ResponsesMockServer() as ars:
+        ars.add(
+            "api.coingecko.com",
+            "/api/v3/simple/price",
+            "GET",
+            Response(
+                text='{"bitcoin": {"usd": 1.0}, "ethereum": {"usd": 2.0}}',
+                status=200,
+                headers={"Content-Type": "application/json"},
+            ),
+        )
+        prices = await get_prices(["bitcoin", "ethereum"])
+        assert prices == {"bitcoin": 1.0, "ethereum": 2.0}
