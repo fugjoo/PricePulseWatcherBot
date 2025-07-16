@@ -7,7 +7,7 @@ from urllib.parse import quote
 import aiohttp
 from aiolimiter import AsyncLimiter
 
-from . import config
+from . import config, db
 
 PRICE_CACHE: Dict[str, Tuple[float, float]] = {}
 COINGECKO_LIMITER = AsyncLimiter(30, 60)
@@ -172,6 +172,9 @@ async def get_coin_info(
     *,
     user: Optional[int] = None,
 ) -> tuple[Optional[dict], Optional[str]]:
+    cached = await db.get_coin_info(coin, max_age=config.CACHE_TTL)
+    if cached:
+        return cached, None
     url = f"{config.COINGECKO_BASE_URL}/coins/{encoded(coin)}"
     headers = config.COINGECKO_HEADERS
     owns_session = session is None
@@ -184,6 +187,7 @@ async def get_coin_info(
                 return None, "request failed"
             if resp.status == 200:
                 data = await resp.json()
+                await db.set_coin_info(coin, data)
                 return data, None
             if resp.status == 404:
                 return None, "coin not found"
@@ -270,6 +274,9 @@ async def get_market_chart(
     *,
     user: Optional[int] = None,
 ) -> tuple[Optional[list[tuple[float, float]]], Optional[str]]:
+    cached = await db.get_coin_chart(coin, days, max_age=config.CACHE_TTL)
+    if cached is not None:
+        return [(p[0], p[1]) for p in cached], None
     end_ts = int(time.time())
     start_ts = end_ts - days * 86400
     url = (
@@ -286,7 +293,9 @@ async def get_market_chart(
             return None, "request failed"
         if resp.status == 200:
             data = await resp.json()
-            return [(p[0] / 1000, p[1]) for p in data.get("prices", [])], None
+            prices = [(p[0] / 1000, p[1]) for p in data.get("prices", [])]
+            await db.set_coin_chart(coin, days, prices)
+            return prices, None
         if resp.status == 404:
             return None, "coin not found"
         return None, f"HTTP {resp.status}"
@@ -300,6 +309,9 @@ async def get_global_overview(
     *,
     user: Optional[int] = None,
 ) -> tuple[Optional[dict], Optional[str]]:
+    cached = await db.get_global_data(max_age=config.CACHE_TTL)
+    if cached:
+        return cached, None
     url = f"{config.COINGECKO_BASE_URL}/global"
     headers = config.COINGECKO_HEADERS
     owns_session = session is None
@@ -312,6 +324,7 @@ async def get_global_overview(
                 return None, "request failed"
             if resp.status == 200:
                 data = await resp.json()
+                await db.set_global_data(data)
                 return data, None
             await asyncio.sleep(2**attempt)
         return None, f"HTTP {resp.status}"

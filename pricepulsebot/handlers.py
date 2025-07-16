@@ -243,6 +243,17 @@ async def check_prices(app) -> None:
                     await db.set_last_price(sub_id, price)
 
 
+async def refresh_cache(app) -> None:
+    async with db.aiosqlite.connect(config.DB_FILE) as database:
+        cursor = await database.execute("SELECT DISTINCT coin_id FROM subscriptions")
+        coins = [row[0] for row in await cursor.fetchall()]
+        await cursor.close()
+    for coin in coins:
+        await api.get_coin_info(coin, user=None)
+        await api.get_market_chart(coin, 7, user=None)
+    await api.get_global_overview(user=None)
+
+
 def get_keyboard() -> ReplyKeyboardMarkup:
     coins_source = config.COINS or config.TOP_COINS[:20] or ["bitcoin"]
     coins = random.sample(coins_source, k=min(3, len(coins_source)))
