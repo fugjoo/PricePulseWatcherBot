@@ -1,9 +1,4 @@
-import os
-import sys
-
-sys.path.insert(0, os.path.dirname(os.path.dirname(__file__)))  # noqa: E402
-
-import pytest  # noqa: E402
+import pytest
 from aresponses import Response, ResponsesMockServer  # noqa: E402
 
 import pricepulsebot.api as api  # noqa: E402

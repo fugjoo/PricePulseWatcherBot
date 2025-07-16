@@ -1,0 +1,24 @@
+[build-system]
+requires = ["setuptools>=61.0"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "pricepulsebot"
+version = "0.1.0"
+description = "Telegram bot that notifies you when a cryptocurrency price changes"
+readme = "README.md"
+requires-python = ">=3.8"
+license = {file = "LICENSE"}
+dependencies = [
+    "python-dotenv",
+    "python-telegram-bot[job-queue]",
+    "aiohttp",
+    "aiosqlite",
+    "APScheduler",
+    "matplotlib",
+    "aiolimiter",
+    "tenacity",
+]
+
+[project.scripts]
+pricepulsebot = "pricepulsebot.main:main"
