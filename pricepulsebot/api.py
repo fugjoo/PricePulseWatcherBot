@@ -381,7 +381,7 @@ async def resolve_coin(query: str, user: Optional[int] = None) -> Optional[str]:
     return None
 
 
-async def fetch_trending_coins() -> None:
+async def fetch_trending_coins() -> Optional[list[dict]]:
     url = f"{config.COINGECKO_BASE_URL}/search/trending"
     try:
         async with aiohttp.ClientSession() as session:
@@ -389,27 +389,50 @@ async def fetch_trending_coins() -> None:
             if not resp or resp.status != 200:
                 raise RuntimeError(getattr(resp, "status", "n/a"))
             data = await resp.json()
-            coins: list[str] = []
+            trending: list[dict] = []
+            ids: list[str] = []
             for c in data.get("coins", [])[:10]:
                 item = c.get("item", {})
                 coin_id = item.get("id")
                 symbol = item.get("symbol")
-                if coin_id:
-                    coins.append(coin_id)
-                    if symbol:
-                        config.COIN_SYMBOLS[coin_id] = symbol.upper()
-                        config.SYMBOL_TO_COIN[symbol.lower()] = coin_id
-            if coins:
-                config.COINS = coins
-                await db.set_trending_coins(coins)
+                name = item.get("name")
+                if not coin_id:
+                    continue
+                ids.append(coin_id)
+                if symbol:
+                    config.COIN_SYMBOLS[coin_id] = symbol.upper()
+                    config.SYMBOL_TO_COIN[symbol.lower()] = coin_id
+                market = (
+                    await get_market_info(coin_id, session=session, user=None) or {}
+                )
+                trending.append(
+                    {
+                        "id": coin_id,
+                        "symbol": symbol,
+                        "name": name,
+                        "price": market.get("current_price"),
+                        "change_24h": market.get("price_change_percentage_24h"),
+                    }
+                )
+            if trending:
+                config.COINS = ids
+                await db.set_trending_coins(trending)
+                return trending
     except aiohttp.ClientError as exc:
         config.logger.error("error fetching trending coins: %s", exc)
     except RuntimeError as err:
         config.logger.warning("trending request failed: %s", err)
-    if not config.COINS:
-        cached = await db.get_trending_coins(max_age=config.CACHE_TTL)
-        if cached:
-            config.COINS = cached
+    cached = await db.get_trending_coins(max_age=config.CACHE_TTL)
+    if cached:
+        for item in cached:
+            coin_id = item.get("id")
+            symbol = item.get("symbol")
+            if coin_id and symbol:
+                config.COIN_SYMBOLS[coin_id] = symbol.upper()
+                config.SYMBOL_TO_COIN[symbol.lower()] = coin_id
+        config.COINS = [c.get("id") for c in cached if c.get("id")]
+        return cached
+    return None
 
 
 async def fetch_top_coins() -> None:

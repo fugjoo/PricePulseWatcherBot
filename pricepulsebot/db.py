@@ -215,7 +215,7 @@ async def set_coin_chart(coin: str, days: int, data: list) -> None:
         await db.commit()
 
 
-async def get_trending_coins(max_age: int = 300) -> Optional[list[str]]:
+async def get_trending_coins(max_age: int = 300) -> Optional[list[dict]]:
     async with aiosqlite.connect(config.DB_FILE) as db:
         cursor = await db.execute(
             "SELECT data, fetched_at FROM trending_coins WHERE id=1"
@@ -227,7 +227,7 @@ async def get_trending_coins(max_age: int = 300) -> Optional[list[str]]:
     return None
 
 
-async def set_trending_coins(coins: list[str]) -> None:
+async def set_trending_coins(coins: list[dict]) -> None:
     async with aiosqlite.connect(config.DB_FILE) as db:
         await db.execute("DELETE FROM trending_coins WHERE id=1")
         await db.execute(
