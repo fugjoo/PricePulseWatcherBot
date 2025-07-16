@@ -52,6 +52,8 @@ PRICE_CHECK_INTERVAL = 60
 
 # optional CoinGecko API key for higher rate limits
 COINGECKO_API_KEY = os.getenv("COINGECKO_API_KEY")
+# base API endpoint, override to use the pro API
+COINGECKO_BASE_URL = os.getenv("COINGECKO_BASE_URL", "https://api.coingecko.com/api/v3")
 COINGECKO_HEADERS = (
     {"x-cg-pro-api-key": COINGECKO_API_KEY} if COINGECKO_API_KEY else None
 )
@@ -181,7 +183,7 @@ def suggest_coins(name: str, limit: int = 3) -> list[str]:
 async def find_coin(query: str) -> Optional[str]:
     """Return coin id for a symbol or name via the CoinGecko search API."""
     # Query CoinGecko search to expand unknown symbols
-    url = f"https://api.coingecko.com/api/v3/search?query={query}"
+    url = f"{COINGECKO_BASE_URL}/search?query={query}"
     try:
         async with aiohttp.ClientSession() as session:
             resp = await api_get(url, session=session, headers=COINGECKO_HEADERS)
@@ -227,7 +229,7 @@ async def resolve_coin(query: str, user: Optional[int] = None) -> Optional[str]:
 async def fetch_trending_coins() -> None:
     """Update COINS and symbol mappings using the trending list from CoinGecko."""
     # Stores the top trending coins so we can offer quick subscription buttons
-    url = "https://api.coingecko.com/api/v3/search/trending"
+    url = f"{COINGECKO_BASE_URL}/search/trending"
     try:
         async with aiohttp.ClientSession() as session:
             resp = await api_get(url, session=session, headers=COINGECKO_HEADERS)
@@ -259,7 +261,7 @@ async def fetch_top_coins() -> None:
     """Populate TOP_COINS with the coins that have the highest market cap."""
     # Used for random suggestions in the reply keyboard
     url = (
-        "https://api.coingecko.com/api/v3/coins/markets"
+        f"{COINGECKO_BASE_URL}/coins/markets"
         "?vs_currency=usd&order=market_cap_desc&per_page=50&page=1"
     )
     try:
@@ -527,7 +529,7 @@ async def get_price(
         key = symbol
     else:
         url = (
-            "https://api.coingecko.com/api/v3/simple/price"
+            f"{COINGECKO_BASE_URL}/simple/price"
             f"?ids={encoded(coin)}&vs_currencies=usd"
         )
         headers = COINGECKO_HEADERS
@@ -585,7 +587,7 @@ async def get_prices(
         return result
 
     url = (
-        "https://api.coingecko.com/api/v3/simple/price"
+        f"{COINGECKO_BASE_URL}/simple/price"
         f"?ids={','.join(encoded(c) for c in coins)}&vs_currencies=usd"
     )
     retries = 3
@@ -634,7 +636,7 @@ async def get_coin_info(
         )
         headers = CMC_HEADERS
     else:
-        url = f"https://api.coingecko.com/api/v3/coins/{encoded(coin)}"
+        url = f"{COINGECKO_BASE_URL}/coins/{encoded(coin)}"
         headers = COINGECKO_HEADERS
 
     owns_session = session is None
@@ -733,7 +735,7 @@ async def get_market_info(
         headers = CMC_HEADERS
     else:
         url = (
-            "https://api.coingecko.com/api/v3/coins/markets"
+            f"{COINGECKO_BASE_URL}/coins/markets"
             f"?vs_currency=usd&ids={encoded(coin)}&price_change_percentage=24h"
         )
         headers = COINGECKO_HEADERS
@@ -783,7 +785,7 @@ async def get_market_chart(
         headers = CMC_HEADERS
     else:
         url = (
-            f"https://api.coingecko.com/api/v3/coins/{encoded(coin)}/market_chart/range"
+            f"{COINGECKO_BASE_URL}/coins/{encoded(coin)}/market_chart/range"
             f"?vs_currency=usd&from={start_ts}&to={end_ts}"
         )
         headers = COINGECKO_HEADERS
@@ -825,7 +827,7 @@ async def get_global_overview(
         url = "https://pro-api.coinmarketcap.com/v1/global-metrics/quotes/latest"
         headers = CMC_HEADERS
     else:
-        url = "https://api.coingecko.com/api/v3/global"
+        url = f"{COINGECKO_BASE_URL}/global"
         headers = COINGECKO_HEADERS
     owns_session = session is None
     if owns_session:

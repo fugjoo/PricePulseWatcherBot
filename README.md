@@ -22,6 +22,7 @@ pip install -r requirements.txt
 cp .env.example .env             # edit TELEGRAM_TOKEN
 # DB_PATH sets the SQLite file used (default subs.db)
 # COINGECKO_API_KEY is optional for higher rate limits
+# COINGECKO_BASE_URL sets the CoinGecko endpoint (use the pro URL if you have a paid plan)
 # LOG_LEVEL enables verbose output when set to DEBUG
 # LOG_FILE writes logs to the given file (default bot.log)
 cp config.json.example config.json
@@ -38,6 +39,7 @@ Create `.env` and `config.json` files from the provided examples. The env file h
 - `TELEGRAM_TOKEN` – token from BotFather
 - `DB_PATH` – SQLite database path (default `subs.db`)
 - `COINGECKO_API_KEY` – optional CoinGecko key
+- `COINGECKO_BASE_URL` – override to use the pro CoinGecko endpoint
 - `PRICE_API_PROVIDER` – `coingecko` or `coinmarketcap`
 - `COINMARKETCAP_API_KEY` – optional CoinMarketCap key
 - `LOG_LEVEL` – log level such as INFO
