@@ -1,11 +1,7 @@
-import os
-import sys
 import time
 
 import aiosqlite
 import pytest
-
-sys.path.insert(0, os.path.dirname(os.path.dirname(__file__)))  # noqa: E402
 
 import pricepulsebot.api as api  # noqa: E402
 import pricepulsebot.config as config  # noqa: E402

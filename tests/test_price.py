@@ -1,8 +1,3 @@
-import os
-import sys
-
-sys.path.insert(0, os.path.dirname(os.path.dirname(__file__)))  # noqa: E402
-
 from importlib import reload  # noqa: E402
 
 import pytest  # noqa: E402
