@@ -2,12 +2,14 @@ import asyncio
 import random
 import time
 from collections import defaultdict, deque
+from datetime import datetime
 from decimal import Decimal
 from io import BytesIO
 from typing import Deque, Dict, List, Optional, Tuple
 
 import aiohttp
 import numpy as np
+from matplotlib import dates as mdates
 from matplotlib import pyplot as plt
 from telegram import (
     Bot,
@@ -520,8 +522,13 @@ async def chart_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
         await update.message.reply_text(f"{ERROR_EMOJI} No data available")
         return
     times, prices = zip(*data)
+    times = [datetime.fromtimestamp(t) for t in times]
     plt.figure(figsize=(6, 3))
     plt.plot(times, prices)
+    ax = plt.gca()
+    ax.xaxis.set_major_locator(mdates.AutoDateLocator())
+    ax.xaxis.set_major_formatter(mdates.DateFormatter("%b %d"))
+    plt.xlabel("Date")
     plt.title(f"{coin.upper()} last {days} days")
     plt.tight_layout()
     buf = BytesIO()
