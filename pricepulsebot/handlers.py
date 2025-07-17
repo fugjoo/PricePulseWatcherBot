@@ -386,6 +386,8 @@ async def build_sub_entries(chat_id: int) -> List[Tuple[str, str]]:
     for _, coin, threshold, interval, *_ in subs:
         cached = await db.get_coin_data(coin)
         info = cached.get("info") if cached else None
+        if info is not None and not isinstance(info, dict):
+            info = {}
         market = cached.get("market_info") if cached else None
         if market is not None and not isinstance(market, dict):
             market = None
@@ -453,6 +455,8 @@ async def info_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
         return
     cached = await db.get_coin_data(coin)
     data = cached.get("info") if cached else None
+    if data is not None and not isinstance(data, dict):
+        data = None
     market = cached.get("market_info") if cached else None
     if market is not None and not isinstance(market, dict):
         market = None
