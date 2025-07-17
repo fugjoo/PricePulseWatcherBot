@@ -18,6 +18,7 @@ from aiolimiter import AsyncLimiter
 from . import config, db
 
 PRICE_CACHE: Dict[str, Tuple[float, float]] = {}
+VOLUME_CACHE: Dict[str, Tuple[float, float]] = {}
 COINGECKO_LIMITER = AsyncLimiter(30, 60)
 LAST_KNOWN_PRICE: Dict[str, float] = {}
 STATUS_WINDOW = 3 * 3600  # 3 hours
@@ -226,6 +227,42 @@ async def get_price(
     return LAST_KNOWN_PRICE.get(coin)
 
 
+async def get_volume(
+    coin: str,
+    session: Optional[aiohttp.ClientSession] = None,
+    *,
+    user: Optional[int] = None,
+) -> Optional[float]:
+    """Return the current 24h volume for ``coin``."""
+    now = time.time()
+    cached = VOLUME_CACHE.get(coin)
+    if cached and now - cached[1] < 60:
+        return cached[0]
+
+    url = (
+        f"{config.COINGECKO_BASE_URL}/coins/{encoded(coin)}/market_chart"
+        f"?vs_currency={config.VS_CURRENCY}&days=1"
+    )
+    headers = config.COINGECKO_HEADERS
+    owns_session = session is None
+    if owns_session:
+        session = aiohttp.ClientSession()
+    try:
+        resp = await api_get(url, session=session, headers=headers, user=user)
+        if not resp or resp.status != 200:
+            return None
+        data = await resp.json()
+        volumes = data.get("total_volumes") or []
+        if not volumes:
+            return None
+        volume = float(volumes[-1][1])
+        VOLUME_CACHE[coin] = (volume, time.time())
+        return volume
+    finally:
+        if owns_session and session:
+            await session.close()
+
+
 async def get_prices(
     coins: list[str],
     session: Optional[aiohttp.ClientSession] = None,
@@ -249,7 +286,10 @@ async def get_prices(
         Mapping of coin ID to its current price.
     """
     ids = ",".join(encoded(c) for c in coins)
-    url = f"{config.COINGECKO_BASE_URL}/simple/price?ids={ids}&vs_currencies={config.VS_CURRENCY}"
+    url = (
+        f"{config.COINGECKO_BASE_URL}/simple/price"
+        f"?ids={ids}&vs_currencies={config.VS_CURRENCY}"
+    )
     retries = 3
     owns_session = session is None
     if owns_session:
@@ -447,7 +487,8 @@ async def get_market_info(
     """Return market data for ``coin`` such as price and 24h change."""
     url = (
         f"{config.COINGECKO_BASE_URL}/coins/markets"
-        f"?vs_currency={config.VS_CURRENCY}&ids={encoded(coin)}&price_change_percentage=24h"
+        f"?vs_currency={config.VS_CURRENCY}&ids={encoded(coin)}"
+        f"&price_change_percentage=24h"
     )
     headers = config.COINGECKO_HEADERS
     owns_session = session is None
@@ -669,7 +710,8 @@ async def fetch_trending_coins() -> Optional[list[dict]]:
             if ids:
                 markets_url = (
                     f"{config.COINGECKO_BASE_URL}/coins/markets"
-                    f"?vs_currency={config.VS_CURRENCY}&ids={','.join(ids)}&price_change_percentage=24h"
+                    f"?vs_currency={config.VS_CURRENCY}&ids={','.join(ids)}"
+                    f"&price_change_percentage=24h"
                 )
                 market_resp = await api_get(
                     markets_url, session=session, headers=config.COINGECKO_HEADERS
@@ -781,6 +823,7 @@ async def refresh_coin_data(
     coin: str, *, session: aiohttp.ClientSession | None = None
 ) -> None:
     """Refresh cached price, market info and chart data for ``coin``."""
+
     owns_session = session is None
     if owns_session:
         session = aiohttp.ClientSession()

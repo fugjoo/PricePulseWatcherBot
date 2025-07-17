@@ -23,6 +23,7 @@ async def init_db() -> None:
                 target_price REAL,
                 direction INTEGER,
                 last_price REAL,
+                last_volume REAL,
                 last_alert_ts REAL
             )
             """
@@ -92,6 +93,8 @@ async def init_db() -> None:
             await db.execute("ALTER TABLE subscriptions ADD COLUMN target_price REAL")
         if "direction" not in columns:
             await db.execute("ALTER TABLE subscriptions ADD COLUMN direction INTEGER")
+        if "last_volume" not in columns:
+            await db.execute("ALTER TABLE subscriptions ADD COLUMN last_volume REAL")
         await db.commit()
 
 
@@ -121,14 +124,17 @@ async def subscribe_coin(
             new_price = target_price if target_price is not None else existing_price
             new_dir = direction if direction is not None else existing_dir
             await db.execute(
-                "UPDATE subscriptions SET threshold=?, interval=?, target_price=?, direction=? WHERE id=?",
+                (
+                    "UPDATE subscriptions SET threshold=?, interval=?, "
+                    "target_price=?, direction=? WHERE id=?"
+                ),
                 (new_th, new_int, new_price, new_dir, sub_id),
             )
         else:
             await db.execute(
                 (
-                    "INSERT INTO subscriptions (chat_id, coin_id, threshold, interval, target_price, direction)"
-                    " VALUES (?, ?, ?, ?, ?, ?)"
+                    "INSERT INTO subscriptions (chat_id, coin_id, threshold, interval,"
+                    " target_price, direction) VALUES (?, ?, ?, ?, ?, ?)"
                 ),
                 (chat_id, coin, threshold, interval, target_price, direction),
             )
@@ -170,23 +176,36 @@ async def list_subscriptions(
     async with aiosqlite.connect(config.DB_FILE) as db:
         cursor = await db.execute(
             (
-                "SELECT id, coin_id, threshold, interval, last_price, last_alert_ts "
-                "FROM subscriptions WHERE chat_id=?"
+                "SELECT id, coin_id, threshold, interval, last_price, "
+                "last_volume, last_alert_ts FROM subscriptions WHERE chat_id=?"
             ),
             (chat_id,),
         )
         rows = await cursor.fetchall()
         await cursor.close()
-        return [(row[0], row[1], row[2], row[3], row[4], row[5]) for row in rows]
+        return [
+            (row[0], row[1], row[2], row[3], row[4], row[5], row[6]) for row in rows
+        ]
 
 
-async def set_last_price(sub_id: int, price: float) -> None:
-    """Update the stored last price for a subscription."""
+async def set_last_price(
+    sub_id: int, price: float, volume: Optional[float] = None
+) -> None:
+    """Update the stored last price and volume for a subscription."""
     async with aiosqlite.connect(config.DB_FILE) as db:
-        await db.execute(
-            "UPDATE subscriptions SET last_price=?, last_alert_ts=? WHERE id=?",
-            (price, time.time(), sub_id),
-        )
+        if volume is None:
+            await db.execute(
+                "UPDATE subscriptions SET last_price=?, last_alert_ts=? WHERE id=?",
+                (price, time.time(), sub_id),
+            )
+        else:
+            await db.execute(
+                (
+                    "UPDATE subscriptions SET last_price=?, last_volume=?, "
+                    "last_alert_ts=? WHERE id=?"
+                ),
+                (price, volume, time.time(), sub_id),
+            )
         await db.commit()
 
 
