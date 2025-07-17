@@ -745,7 +745,6 @@ async def fetch_top_coins() -> None:
         config.logger.error("error fetching top coins: %s", exc)
 
 
-
 async def get_news(
     coin: str,
     session: Optional[aiohttp.ClientSession] = None,

@@ -10,6 +10,7 @@ percentage. Create a `.env` from the example and keep your
 - Suggest random coins from the top market cap list in the keyboard
 - Autocompletion for all bot commands
 - Monitor API health with `/status`
+- Check recent coin news via `/news` (CryptoCompare)
 
 ## Quickstart
 
