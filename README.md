@@ -54,8 +54,8 @@ Create a `.env` file from the example. It holds credentials and runtime options:
 
 - `/add <coin> [pct] [interval]` – subscribe to price alerts
 - `/remove <coin>` – remove a subscription
-- `/list` – list active subscriptions
-- `/info <coin>` – show current coin data
+- `/list [full]` – list active subscriptions (full shows charts)
+- `/info <coin> [full]` – show current coin data (full adds chart)
 - `/chart <coin> [days]` – plot price history (alias `/charts`)
 - `/trends` – show trending coins
 - `/global` – show global market stats
