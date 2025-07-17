@@ -28,6 +28,7 @@ cp .env.example .env             # edit TELEGRAM_TOKEN
 # DEFAULT_THRESHOLD and DEFAULT_INTERVAL control new subscriptions
 # PRICE_CHECK_INTERVAL sets how often prices are fetched
 # ENABLE_MILESTONE_ALERTS toggles milestone notifications
+# DEFAULT_VS_CURRENCY sets the reference currency used for prices
 python run.py
 ```
 
@@ -49,19 +50,23 @@ Create a `.env` file from the example. It holds credentials and runtime options:
 - `DEFAULT_INTERVAL` – subscription interval when none is given
 - `PRICE_CHECK_INTERVAL` – how often prices are checked
 - `ENABLE_MILESTONE_ALERTS` – send messages for price milestones
+- `DEFAULT_VS_CURRENCY` – default currency used for API requests
 
 ### Commands
 
 - `/add <coin> [pct] [interval]` – subscribe to price alerts
 - `/remove <coin>` – remove a subscription
+- `/clear` – remove all subscriptions
 - `/list` – list active subscriptions
 - `/info <coin>` – show current coin data
 - `/chart <coin> [days]` – plot price history (alias `/charts`)
+- `/news [coin]` – show latest news (uses subscriptions when omitted)
 - `/trends` – show trending coins
 - `/global` – show global market stats
 - `/status` – display API status overview
 - `/milestones [on|off]` – toggle milestone notifications (no args switch)
-- `/settings [key value]` – show or change default settings
+- `/settings [key value]` – show or change default settings (threshold,
+  interval, milestones, currency)
 
 Intervals accept plain seconds or values like `1h`, `15m` or `30s`.
 

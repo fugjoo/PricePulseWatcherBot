@@ -1,5 +1,6 @@
 import time
 
+import aiohttp
 import aiosqlite
 import pytest
 
@@ -45,7 +46,8 @@ async def test_refresh_coin_data_populates_table(tmp_path, monkeypatch):
     monkeypatch.setattr(api, "get_coin_info", fake_coin_info)
     monkeypatch.setattr(api, "get_market_chart", fake_chart)
 
-    await api.refresh_coin_data("bitcoin")
+    async with aiohttp.ClientSession() as session:
+        await api.refresh_coin_data("bitcoin", session=session)
     data = await db.get_coin_data("bitcoin")
     assert data["price"] == 1.0
     assert data["market_info"]["current_price"] == 1.0
