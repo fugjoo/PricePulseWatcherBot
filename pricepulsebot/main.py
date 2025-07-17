@@ -14,7 +14,7 @@ from telegram.ext import (
     filters,
 )
 
-from . import api, config, db, handlers
+from . import api, config, db, handlers, liquidations
 
 
 async def main() -> None:
@@ -40,6 +40,7 @@ async def main() -> None:
     app.add_handler(CommandHandler("news", handlers.news_cmd))
     app.add_handler(CommandHandler("trends", handlers.trends_cmd))
     app.add_handler(CommandHandler("global", handlers.global_cmd))
+    app.add_handler(CommandHandler(["feargreed", "sentiment"], handlers.feargreed_cmd))
     app.add_handler(CommandHandler("status", handlers.status_cmd))
     app.add_handler(CommandHandler("valuearea", handlers.valuearea_cmd))
     app.add_handler(CommandHandler("milestones", handlers.milestones_cmd))
@@ -54,6 +55,10 @@ async def main() -> None:
         seconds=config.PRICE_CHECK_INTERVAL,
         args=(app,),
     )
+    if config.ENABLE_LIQUIDATION_ALERTS:
+        scheduler.add_job(
+            liquidations.check_liquidations, "interval", minutes=1, args=(app,)
+        )
     scheduler.add_job(handlers.refresh_cache, "interval", minutes=5, args=(app,))
     scheduler.add_job(api.fetch_trending_coins, "interval", minutes=10)
     scheduler.add_job(api.fetch_top_coins, "interval", minutes=10)
@@ -73,6 +78,7 @@ async def main() -> None:
             BotCommand("news", "Latest news"),
             BotCommand("trends", "Trending coins"),
             BotCommand("global", "Global market"),
+            BotCommand("feargreed", "Market sentiment"),
             BotCommand("status", "API status"),
             BotCommand("valuearea", "Volume profile"),
             BotCommand("milestones", "Toggle milestone alerts"),

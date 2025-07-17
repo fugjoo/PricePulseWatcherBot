@@ -23,6 +23,7 @@ async def init_db() -> None:
                 target_price REAL,
                 direction INTEGER,
                 last_price REAL,
+                last_volume REAL,
                 last_alert_ts REAL
             )
             """
@@ -67,6 +68,15 @@ async def init_db() -> None:
         )
         await db.execute(
             """
+            CREATE TABLE IF NOT EXISTS feargreed (
+                id INTEGER PRIMARY KEY CHECK (id = 1),
+                data TEXT,
+                fetched_at REAL
+            )
+            """
+        )
+        await db.execute(
+            """
             CREATE TABLE IF NOT EXISTS coin_data (
                 coin_id TEXT PRIMARY KEY,
                 price REAL,
@@ -92,6 +102,8 @@ async def init_db() -> None:
             await db.execute("ALTER TABLE subscriptions ADD COLUMN target_price REAL")
         if "direction" not in columns:
             await db.execute("ALTER TABLE subscriptions ADD COLUMN direction INTEGER")
+        if "last_volume" not in columns:
+            await db.execute("ALTER TABLE subscriptions ADD COLUMN last_volume REAL")
         await db.commit()
 
 
@@ -173,23 +185,36 @@ async def list_subscriptions(
     async with aiosqlite.connect(config.DB_FILE) as db:
         cursor = await db.execute(
             (
-                "SELECT id, coin_id, threshold, interval, last_price, last_alert_ts "
-                "FROM subscriptions WHERE chat_id=?"
+                "SELECT id, coin_id, threshold, interval, last_price, "
+                "last_volume, last_alert_ts FROM subscriptions WHERE chat_id=?"
             ),
             (chat_id,),
         )
         rows = await cursor.fetchall()
         await cursor.close()
-        return [(row[0], row[1], row[2], row[3], row[4], row[5]) for row in rows]
+        return [
+            (row[0], row[1], row[2], row[3], row[4], row[5], row[6]) for row in rows
+        ]
 
 
-async def set_last_price(sub_id: int, price: float) -> None:
-    """Update the stored last price for a subscription."""
+async def set_last_price(
+    sub_id: int, price: float, volume: Optional[float] = None
+) -> None:
+    """Update the stored last price and volume for a subscription."""
     async with aiosqlite.connect(config.DB_FILE) as db:
-        await db.execute(
-            "UPDATE subscriptions SET last_price=?, last_alert_ts=? WHERE id=?",
-            (price, time.time(), sub_id),
-        )
+        if volume is None:
+            await db.execute(
+                "UPDATE subscriptions SET last_price=?, last_alert_ts=? WHERE id=?",
+                (price, time.time(), sub_id),
+            )
+        else:
+            await db.execute(
+                (
+                    "UPDATE subscriptions SET last_price=?, last_volume=?, "
+                    "last_alert_ts=? WHERE id=?"
+                ),
+                (price, volume, time.time(), sub_id),
+            )
         await db.commit()
 
 
@@ -286,6 +311,28 @@ async def set_trending_coins(coins: list[dict]) -> None:
         await db.execute(
             "INSERT INTO trending_coins (id, data, fetched_at) VALUES (1, ?, ?)",
             (json.dumps(coins), time.time()),
+        )
+        await db.commit()
+
+
+async def get_feargreed() -> Optional[dict]:
+    """Return cached Fear & Greed index data if present."""
+    async with aiosqlite.connect(config.DB_FILE) as db:
+        cursor = await db.execute("SELECT data, fetched_at FROM feargreed WHERE id=1")
+        row = await cursor.fetchone()
+        await cursor.close()
+    if row:
+        return json.loads(row[0])
+    return None
+
+
+async def set_feargreed(data: dict) -> None:
+    """Persist Fear & Greed index information."""
+    async with aiosqlite.connect(config.DB_FILE) as db:
+        await db.execute("DELETE FROM feargreed WHERE id=1")
+        await db.execute(
+            "INSERT INTO feargreed (id, data, fetched_at) VALUES (1, ?, ?)",
+            (json.dumps(data), time.time()),
         )
         await db.commit()
 

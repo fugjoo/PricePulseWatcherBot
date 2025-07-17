@@ -18,6 +18,7 @@ from aiolimiter import AsyncLimiter
 from . import config, db
 
 PRICE_CACHE: Dict[str, Tuple[float, float]] = {}
+VOLUME_CACHE: Dict[str, Tuple[float, float]] = {}
 COINGECKO_LIMITER = AsyncLimiter(30, 60)
 LAST_KNOWN_PRICE: Dict[str, float] = {}
 STATUS_WINDOW = 3 * 3600  # 3 hours
@@ -224,6 +225,42 @@ async def get_price(
         if owns_session:
             await session.close()
     return LAST_KNOWN_PRICE.get(coin)
+
+
+async def get_volume(
+    coin: str,
+    session: Optional[aiohttp.ClientSession] = None,
+    *,
+    user: Optional[int] = None,
+) -> Optional[float]:
+    """Return the current 24h volume for ``coin``."""
+    now = time.time()
+    cached = VOLUME_CACHE.get(coin)
+    if cached and now - cached[1] < 60:
+        return cached[0]
+
+    url = (
+        f"{config.COINGECKO_BASE_URL}/coins/{encoded(coin)}/market_chart"
+        f"?vs_currency={config.VS_CURRENCY}&days=1"
+    )
+    headers = config.COINGECKO_HEADERS
+    owns_session = session is None
+    if owns_session:
+        session = aiohttp.ClientSession()
+    try:
+        resp = await api_get(url, session=session, headers=headers, user=user)
+        if not resp or resp.status != 200:
+            return None
+        data = await resp.json()
+        volumes = data.get("total_volumes") or []
+        if not volumes:
+            return None
+        volume = float(volumes[-1][1])
+        VOLUME_CACHE[coin] = (volume, time.time())
+        return volume
+    finally:
+        if owns_session and session:
+            await session.close()
 
 
 async def get_prices(
@@ -556,6 +593,37 @@ async def get_global_overview(
             await session.close()
 
 
+async def get_feargreed_index(
+    session: Optional[aiohttp.ClientSession] = None,
+    *,
+    user: Optional[int] = None,
+) -> tuple[Optional[dict], Optional[str]]:
+    """Return the latest Fear & Greed index data."""
+    cached = await db.get_feargreed()
+    if cached:
+        return cached, None
+    url = "https://api.alternative.me/fng/?limit=1"
+    owns_session = session is None
+    if owns_session:
+        session = aiohttp.ClientSession()
+    try:
+        resp = await api_get(url, session=session, user=user)
+        if not resp:
+            return None, "request failed"
+        if resp.status == 200:
+            data = await resp.json()
+            try:
+                entry = data.get("data", [])[0]
+            except (IndexError, TypeError, AttributeError):
+                return None, "invalid response"
+            await db.set_feargreed(entry)
+            return entry, None
+        return None, f"HTTP {resp.status}"
+    finally:
+        if owns_session and session:
+            await session.close()
+
+
 async def find_coin(query: str) -> Optional[str]:
     """Look up a coin ID on CoinGecko given a query string."""
     url = f"{config.COINGECKO_BASE_URL}/search?query={quote(query, safe='')}"
@@ -786,6 +854,7 @@ async def refresh_coin_data(
     coin: str, session: Optional[aiohttp.ClientSession] = None
 ) -> None:
     """Refresh cached price, market info and chart data for ``coin``."""
+
     owns_session = session is None
     if owns_session:
         session = aiohttp.ClientSession()
