@@ -46,23 +46,40 @@ ERROR_EMOJI = "\u26a0\ufe0f"
 SETTINGS_EMOJI = "\u2699\ufe0f"
 BACK_EMOJI = "\u2b05\ufe0f"
 
-# (name, description) pairs used for help text and bot registration
+# Commands organized by category for help output
+COMMAND_CATEGORIES: dict[str, list[tuple[str, str]]] = {
+    "Start": [
+        ("start", "Show menu"),
+    ],
+    "Abos": [
+        ("add", "Subscribe to price alerts"),
+        ("remove", "Remove subscription"),
+        ("clear", "Remove all subscriptions"),
+        ("list", "List subscriptions"),
+    ],
+    "Infos und Tools": [
+        ("info", "Coin information"),
+        ("chart", "Price chart"),
+        ("news", "Latest news"),
+        ("trends", "Trending coins"),
+        ("global", "Global market"),
+        ("feargreed", "Market sentiment"),
+        ("valuearea", "Volume profile"),
+    ],
+    "Allgemeines": [
+        ("help", "Show help"),
+    ],
+    "Bot Settings": [
+        ("settings", "Show or change defaults"),
+    ],
+    "Status": [
+        ("status", "API status"),
+    ],
+}
+
+# Flattened list for bot registration
 COMMANDS: list[tuple[str, str]] = [
-    ("add", "Subscribe to price alerts"),
-    ("chart", "Price chart"),
-    ("clear", "Remove all subscriptions"),
-    ("feargreed", "Market sentiment"),
-    ("global", "Global market"),
-    ("help", "Show help"),
-    ("info", "Coin information"),
-    ("list", "List subscriptions"),
-    ("news", "Latest news"),
-    ("remove", "Remove subscription"),
-    ("settings", "Show or change defaults"),
-    ("start", "Show menu"),
-    ("status", "API status"),
-    ("trends", "Trending coins"),
-    ("valuearea", "Volume profile"),
+    cmd for cmds in COMMAND_CATEGORIES.values() for cmd in cmds
 ]
 
 
@@ -530,7 +547,12 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
 
 async def help_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     """Display available commands and usage information."""
-    lines = [f"/{name} - {desc}" for name, desc in COMMANDS]
+    lines: list[str] = []
+    for category, commands in COMMAND_CATEGORIES.items():
+        lines.append(f"{category}:")
+        for name, desc in commands:
+            lines.append(f"/{name} - {desc}")
+        lines.append("")
     lines.append("Intervals can be like 1h, 15m or 30s")
     await update.message.reply_text(
         f"{INFO_EMOJI} " + "\n".join(lines), reply_markup=get_keyboard()
