@@ -56,7 +56,6 @@ COMMANDS: list[tuple[str, str]] = [
     ("help", "Show help"),
     ("info", "Coin information"),
     ("list", "List subscriptions"),
-    ("milestones", "Toggle milestone alerts"),
     ("news", "Latest news"),
     ("remove", "Remove subscription"),
     ("settings", "Show or change defaults"),
@@ -945,22 +944,6 @@ async def valuearea_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE) -> N
         f"- VAH: ${format_price(profile['vah'])}"
     )
     await update.message.reply_text(text)
-
-
-async def milestones_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
-    """Toggle milestone alerts or set their state explicitly."""
-    if not context.args:
-        config.ENABLE_MILESTONE_ALERTS = not config.ENABLE_MILESTONE_ALERTS
-        state = "enabled" if config.ENABLE_MILESTONE_ALERTS else "disabled"
-        await update.message.reply_text(f"{SUCCESS_EMOJI} Milestone alerts {state}")
-        return
-    arg = context.args[0].lower()
-    if arg not in {"on", "off"}:
-        await update.message.reply_text(f"{ERROR_EMOJI} Usage: /milestones [on|off]")
-        return
-    config.ENABLE_MILESTONE_ALERTS = arg == "on"
-    state = "enabled" if config.ENABLE_MILESTONE_ALERTS else "disabled"
-    await update.message.reply_text(f"{SUCCESS_EMOJI} Milestone alerts {state}")
 
 
 async def settings_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:

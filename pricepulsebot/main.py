@@ -43,7 +43,6 @@ async def main() -> None:
     app.add_handler(CommandHandler(["feargreed", "sentiment"], handlers.feargreed_cmd))
     app.add_handler(CommandHandler("status", handlers.status_cmd))
     app.add_handler(CommandHandler("valuearea", handlers.valuearea_cmd))
-    app.add_handler(CommandHandler("milestones", handlers.milestones_cmd))
     app.add_handler(CommandHandler("settings", handlers.settings_cmd))
     app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handlers.menu))
     app.add_handler(CallbackQueryHandler(handlers.button))
