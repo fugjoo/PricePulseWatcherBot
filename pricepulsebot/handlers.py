@@ -367,7 +367,9 @@ async def build_sub_entries(chat_id: int) -> List[Tuple[str, str]]:
             info, _ = await api.get_coin_info(coin, user=chat_id)
         info = info or {}
         if market is None:
-            market = info.get("market_data", {})
+            market = info.get("market_data")
+            if not isinstance(market, dict):
+                market = {}
         if price is None:
             price = (
                 market.get("current_price", {}).get("usd")
