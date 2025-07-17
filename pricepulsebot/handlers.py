@@ -253,24 +253,25 @@ async def check_prices(app) -> None:
                     MILESTONE_CACHE[(chat_id, coin)] = price
                     continue
                 prev = MILESTONE_CACHE.get((chat_id, coin), last_price)
-                for level in milestones_crossed(prev, price):
-                    symbol = api.symbol_for(coin)
-                    if price > prev:
-                        msg = (
-                            f"{symbol} breaks through ${format_price(level)} "
-                            f"(now ${format_price(price)})"
-                        )
-                        await send_rate_limited(
-                            app.bot, chat_id, msg, emoji=f"{UP_ARROW} {ROCKET}"
-                        )
-                    else:
-                        msg = (
-                            f"{symbol} falls below ${format_price(level)} "
-                            f"(now ${format_price(price)})"
-                        )
-                        await send_rate_limited(
-                            app.bot, chat_id, msg, emoji=f"{DOWN_ARROW} {BOMB}"
-                        )
+                if config.ENABLE_MILESTONE_ALERTS:
+                    for level in milestones_crossed(prev, price):
+                        symbol = api.symbol_for(coin)
+                        if price > prev:
+                            msg = (
+                                f"{symbol} breaks through ${format_price(level)} "
+                                f"(now ${format_price(price)})"
+                            )
+                            await send_rate_limited(
+                                app.bot, chat_id, msg, emoji=f"{UP_ARROW} {ROCKET}"
+                            )
+                        else:
+                            msg = (
+                                f"{symbol} falls below ${format_price(level)} "
+                                f"(now ${format_price(price)})"
+                            )
+                            await send_rate_limited(
+                                app.bot, chat_id, msg, emoji=f"{DOWN_ARROW} {BOMB}"
+                            )
                 MILESTONE_CACHE[(chat_id, coin)] = price
                 if last_ts is None or time.time() - last_ts >= interval:
                     raw_change = (price - last_price) / last_price * 100
