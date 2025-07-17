@@ -9,8 +9,14 @@ from typing import Deque, Dict, List, Optional, Tuple
 import aiohttp
 import numpy as np
 from matplotlib import pyplot as plt
-from telegram import (Bot, InlineKeyboardButton, InlineKeyboardMarkup,
-                      KeyboardButton, ReplyKeyboardMarkup, Update)
+from telegram import (
+    Bot,
+    InlineKeyboardButton,
+    InlineKeyboardMarkup,
+    KeyboardButton,
+    ReplyKeyboardMarkup,
+    Update,
+)
 from telegram.constants import ChatAction
 from telegram.ext import ContextTypes
 
@@ -542,7 +548,8 @@ async def trends_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None
         if price is not None:
             line += f" ${format_price(price)}"
         if change_24h is not None:
-            line += f" ({change_24h:+.2f}% 24h)"
+            arrow = UP_ARROW if change_24h >= 0 else DOWN_ARROW
+            line += f" {arrow} ({change_24h:+.2f}% 24h)"
         lines.append(line)
     text = f"{INFO_EMOJI} Trending coins:\n" + "\n".join(lines)
     await update.message.reply_text(text)
