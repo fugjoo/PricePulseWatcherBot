@@ -379,6 +379,21 @@ async def find_coin(query: str) -> Optional[str]:
 
 async def resolve_coin(query: str, user: Optional[int] = None) -> Optional[str]:
     coin = normalize_coin(query)
+
+    cached = await db.get_coin_data(coin)
+    if cached and isinstance(cached.get("market_info"), dict):
+        if cached["market_info"].get("current_price") is not None:
+            return coin
+
+    info = await db.get_coin_info(coin)
+    if info:
+        market = info.get("market_data", {})
+        if (
+            isinstance(market, dict)
+            and market.get("current_price", {}).get("usd") is not None
+        ):
+            return coin
+
     info = await get_market_info(coin, user=user)
     if info and info.get("current_price") is not None:
         return coin
@@ -387,6 +402,18 @@ async def resolve_coin(query: str, user: Optional[int] = None) -> Optional[str]:
         alt = await find_coin(candidate)
         if not alt:
             continue
+        cached = await db.get_coin_data(alt)
+        if cached and isinstance(cached.get("market_info"), dict):
+            if cached["market_info"].get("current_price") is not None:
+                return alt
+        info = await db.get_coin_info(alt)
+        if info:
+            market = info.get("market_data", {})
+            if (
+                isinstance(market, dict)
+                and market.get("current_price", {}).get("usd") is not None
+            ):
+                return alt
         info = await get_market_info(alt, user=user)
         if info and info.get("current_price") is not None:
             return alt
@@ -395,6 +422,18 @@ async def resolve_coin(query: str, user: Optional[int] = None) -> Optional[str]:
 
 
 async def fetch_trending_coins() -> Optional[list[dict]]:
+    cached = await db.get_trending_coins()
+    if cached:
+        for item in cached:
+            coin_id = item.get("id")
+            symbol = item.get("symbol")
+            if coin_id and symbol:
+                config.COIN_SYMBOLS[coin_id] = symbol.upper()
+                config.SYMBOL_TO_COIN[symbol.lower()] = coin_id
+        config.COINS = [c.get("id") for c in cached if c.get("id")]
+        cached.sort(key=lambda x: (x["change_24h"] is None, -(x["change_24h"] or 0)))
+        return cached
+
     url = f"{config.COINGECKO_BASE_URL}/search/trending"
     try:
         async with aiohttp.ClientSession() as session:

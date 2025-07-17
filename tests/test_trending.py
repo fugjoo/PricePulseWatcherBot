@@ -54,3 +54,18 @@ async def test_fetch_trending_coins_cached(tmp_path, monkeypatch):
     again = await api.fetch_trending_coins()
     assert again == cached
     assert config.COINS == ["solana", "bitcoin"]
+
+
+@pytest.mark.asyncio
+async def test_fetch_trending_coins_uses_cache(tmp_path, monkeypatch):
+    config.DB_FILE = str(tmp_path / "subs.db")
+    await db.init_db()
+    cached = [{"id": "bitcoin", "symbol": "btc", "price": 1.0, "change_24h": 1.0}]
+    await db.set_trending_coins(cached)
+
+    async def fail(*args, **kwargs):
+        raise AssertionError("network called")
+
+    monkeypatch.setattr(api, "api_get", fail)
+    result = await api.fetch_trending_coins()
+    assert result == cached
