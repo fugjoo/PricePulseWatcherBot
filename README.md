@@ -26,6 +26,7 @@ cp .env.example .env             # edit TELEGRAM_TOKEN
 # LOG_FILE writes logs to the given file (default bot.log) and recreates it if removed
 # DEFAULT_THRESHOLD and DEFAULT_INTERVAL control new subscriptions
 # PRICE_CHECK_INTERVAL sets how often prices are fetched
+# ENABLE_MILESTONE_ALERTS toggles milestone notifications
 python run.py
 ```
 
@@ -46,6 +47,7 @@ Create a `.env` file from the example. It holds credentials and runtime options:
 - `DEFAULT_THRESHOLD` – percent change that triggers an alert
 - `DEFAULT_INTERVAL` – subscription interval when none is given
 - `PRICE_CHECK_INTERVAL` – how often prices are checked
+- `ENABLE_MILESTONE_ALERTS` – send messages for price milestones
 
 ### Commands
 
