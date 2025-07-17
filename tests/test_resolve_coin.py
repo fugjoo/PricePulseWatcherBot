@@ -1,6 +1,8 @@
 import pytest  # noqa: E402
 
 import pricepulsebot.api as api  # noqa: E402
+import pricepulsebot.config as config  # noqa: E402
+import pricepulsebot.db as db  # noqa: E402
 
 resolve_coin = api.resolve_coin
 
@@ -53,3 +55,27 @@ async def test_resolve_coin_symbol_search(monkeypatch):
 
     result = await resolve_coin("ltc")
     assert result == "litecoin-cash"
+
+
+@pytest.mark.asyncio
+async def test_resolve_coin_uses_cache(tmp_path, monkeypatch):
+    config.DB_FILE = str(tmp_path / "subs.db")
+    await db.init_db()
+    await db.set_coin_data(
+        "bitcoin",
+        {
+            "price": 1.0,
+            "market_info": {"current_price": 1.0},
+            "info": {},
+            "chart_7d": [],
+        },
+    )
+
+    async def fail(*args, **kwargs):
+        raise AssertionError("network called")
+
+    monkeypatch.setattr(api, "get_market_info", fail)
+    monkeypatch.setattr(api, "find_coin", fail)
+
+    result = await resolve_coin("bitcoin")
+    assert result == "bitcoin"
