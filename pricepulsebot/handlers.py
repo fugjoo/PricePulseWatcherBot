@@ -13,14 +13,8 @@ import aiohttp
 import numpy as np
 from matplotlib import dates as mdates
 from matplotlib import pyplot as plt
-from telegram import (
-    Bot,
-    InlineKeyboardButton,
-    InlineKeyboardMarkup,
-    KeyboardButton,
-    ReplyKeyboardMarkup,
-    Update,
-)
+from telegram import (Bot, InlineKeyboardButton, InlineKeyboardMarkup,
+                      KeyboardButton, ReplyKeyboardMarkup, Update)
 from telegram.constants import ChatAction
 from telegram.ext import ContextTypes
 
@@ -218,7 +212,8 @@ async def check_prices(app) -> None:
             cursor = await database.execute(
                 (
                     "SELECT id, chat_id, coin_id, threshold, interval, target_price, "
-                    "direction, last_price, last_alert_ts FROM subscriptions"
+                    "direction, last_price, last_volume, last_alert_ts "
+                    "FROM subscriptions"
                 )
             )
             rows = await cursor.fetchall()
@@ -422,6 +417,42 @@ def get_keyboard() -> ReplyKeyboardMarkup:
         [KeyboardButton(f"{LIST_EMOJI} List"), KeyboardButton(f"{HELP_EMOJI} Help")],
     ]
     return ReplyKeyboardMarkup(keyboard, resize_keyboard=True, is_persistent=True)
+
+
+def get_settings_keyboard() -> InlineKeyboardMarkup:
+    """Return an inline keyboard showing current default settings."""
+    buttons = [
+        [
+            InlineKeyboardButton(
+                f"threshold: ±{config.DEFAULT_THRESHOLD}%",
+                callback_data="settings:threshold",
+            )
+        ],
+        [
+            InlineKeyboardButton(
+                f"interval: {config.format_interval(config.DEFAULT_INTERVAL)}",
+                callback_data="settings:interval",
+            )
+        ],
+        [
+            InlineKeyboardButton(
+                f"milestones: {'on' if config.ENABLE_MILESTONE_ALERTS else 'off'}",
+                callback_data="settings:milestones",
+            )
+        ],
+        [
+            InlineKeyboardButton(
+                f"liquidations: {'on' if config.ENABLE_LIQUIDATION_ALERTS else 'off'}",
+                callback_data="settings:liquidations",
+            )
+        ],
+        [
+            InlineKeyboardButton(
+                f"currency: {config.VS_CURRENCY}", callback_data="settings:currency"
+            )
+        ],
+    ]
+    return InlineKeyboardMarkup(buttons)
 
 
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
@@ -888,16 +919,8 @@ async def milestones_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
 async def settings_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     """View or modify default alert settings."""
     if not context.args:
-        text = (
-            f"{INFO_EMOJI} Current settings:\n"
-            f"- threshold: ±{config.DEFAULT_THRESHOLD}%\n"
-            f"- interval: {config.format_interval(config.DEFAULT_INTERVAL)}\n"
-            f"- pricecheck: {config.format_interval(config.PRICE_CHECK_INTERVAL)}\n"
-            f"- milestones: {'on' if config.ENABLE_MILESTONE_ALERTS else 'off'}\n"
-            f"- liquidations: {'on' if config.ENABLE_LIQUIDATION_ALERTS else 'off'}\n"
-            f"- currency: {config.VS_CURRENCY}"
-        )
-        await update.message.reply_text(text)
+        text = f"{INFO_EMOJI} Current settings:"
+        await update.message.reply_text(text, reply_markup=get_settings_keyboard())
         return
     if len(context.args) < 2:
         await update.message.reply_text(
@@ -1014,6 +1037,49 @@ async def button(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
             text=f"{INFO_EMOJI} Use /add {coin} [pct] [interval] to update",
         )
         await query.edit_message_reply_markup(reply_markup=None)
+    elif query.data.startswith("settings:"):
+        key = query.data.split(":", 1)[1]
+        text = ""
+        if key == "threshold":
+            options = [0.1, 0.5, 1.0, 2.0, 5.0]
+            try:
+                idx = options.index(config.DEFAULT_THRESHOLD)
+            except ValueError:
+                idx = -1
+            config.DEFAULT_THRESHOLD = options[(idx + 1) % len(options)]
+            text = (
+                f"{SUCCESS_EMOJI} Default threshold set to {config.DEFAULT_THRESHOLD}%"
+            )
+        elif key == "interval":
+            options = [60, 300, 600, 1800, 3600]
+            try:
+                idx = options.index(config.DEFAULT_INTERVAL)
+            except ValueError:
+                idx = -1
+            config.DEFAULT_INTERVAL = options[(idx + 1) % len(options)]
+            text = (
+                f"{SUCCESS_EMOJI} Default interval set to "
+                f"{config.format_interval(config.DEFAULT_INTERVAL)}"
+            )
+        elif key == "milestones":
+            config.ENABLE_MILESTONE_ALERTS = not config.ENABLE_MILESTONE_ALERTS
+            state = "enabled" if config.ENABLE_MILESTONE_ALERTS else "disabled"
+            text = f"{SUCCESS_EMOJI} Milestone alerts {state}"
+        elif key == "liquidations":
+            config.ENABLE_LIQUIDATION_ALERTS = not config.ENABLE_LIQUIDATION_ALERTS
+            state = "enabled" if config.ENABLE_LIQUIDATION_ALERTS else "disabled"
+            text = f"{SUCCESS_EMOJI} Liquidation alerts {state}"
+        elif key == "currency":
+            options = ["usd", "eur", "btc"]
+            try:
+                idx = options.index(config.VS_CURRENCY)
+            except ValueError:
+                idx = -1
+            config.VS_CURRENCY = options[(idx + 1) % len(options)]
+            text = f"{SUCCESS_EMOJI} Default currency set to {config.VS_CURRENCY}"
+        if text:
+            await context.bot.send_message(query.message.chat_id, text)
+        await query.edit_message_reply_markup(reply_markup=get_settings_keyboard())
     elif query.data == "list":
         entries = await build_sub_entries(query.message.chat_id)
         if not entries:
