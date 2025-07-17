@@ -487,8 +487,8 @@ async def get_market_info(
     """Return market data for ``coin`` such as price and 24h change."""
     url = (
         f"{config.COINGECKO_BASE_URL}/coins/markets"
-        f"?vs_currency={config.VS_CURRENCY}&ids={encoded(coin)}"
-        f"&price_change_percentage=24h"
+        f"?vs_currency={config.VS_CURRENCY}"
+        f"&ids={encoded(coin)}&price_change_percentage=24h"
     )
     headers = config.COINGECKO_HEADERS
     owns_session = session is None
@@ -741,8 +741,8 @@ async def fetch_trending_coins() -> Optional[list[dict]]:
             if ids:
                 markets_url = (
                     f"{config.COINGECKO_BASE_URL}/coins/markets"
-                    f"?vs_currency={config.VS_CURRENCY}&ids={','.join(ids)}"
-                    f"&price_change_percentage=24h"
+                    f"?vs_currency={config.VS_CURRENCY}"
+                    f"&ids={','.join(ids)}&price_change_percentage=24h"
                 )
                 market_resp = await api_get(
                     markets_url, session=session, headers=config.COINGECKO_HEADERS
@@ -851,9 +851,7 @@ async def get_news(
 
 
 async def refresh_coin_data(
-
     coin: str, session: Optional[aiohttp.ClientSession] = None
-
 ) -> None:
     """Refresh cached price, market info and chart data for ``coin``."""
 

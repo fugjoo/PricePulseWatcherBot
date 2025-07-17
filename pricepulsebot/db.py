@@ -134,15 +134,14 @@ async def subscribe_coin(
             new_dir = direction if direction is not None else existing_dir
             await db.execute(
                 (
-                    "UPDATE subscriptions SET threshold=?, interval=?, "
-                    "target_price=?, direction=? WHERE id=?"
+                    "UPDATE subscriptions SET threshold=?, interval=?, target_price=?, "
+                    "direction=? WHERE id=?"
                 ),
                 (new_th, new_int, new_price, new_dir, sub_id),
             )
         else:
             await db.execute(
                 (
-
                     "INSERT INTO subscriptions (chat_id, coin_id, threshold, interval, "
                     "target_price, direction) VALUES (?, ?, ?, ?, ?, ?)"
                 ),
