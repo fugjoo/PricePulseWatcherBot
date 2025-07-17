@@ -36,6 +36,8 @@ async def main() -> None:
     app.add_handler(CommandHandler("trends", handlers.trends_cmd))
     app.add_handler(CommandHandler("global", handlers.global_cmd))
     app.add_handler(CommandHandler("valuearea", handlers.valuearea_cmd))
+    app.add_handler(CommandHandler("milestones", handlers.milestones_cmd))
+    app.add_handler(CommandHandler("settings", handlers.settings_cmd))
     app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handlers.menu))
     app.add_handler(CallbackQueryHandler(handlers.button))
 
@@ -64,6 +66,8 @@ async def main() -> None:
             BotCommand("trends", "Trending coins"),
             BotCommand("global", "Global market"),
             BotCommand("valuearea", "Volume profile"),
+            BotCommand("milestones", "Toggle milestone alerts"),
+            BotCommand("settings", "Show or change defaults"),
         ]
     )
     await app.start()
