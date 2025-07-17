@@ -207,7 +207,7 @@ async def check_prices(app) -> None:
         prices: Dict[str, float] = {}
         missing: List[str] = []
         for coin in coins:
-            cached = await db.get_coin_data(coin, max_age=config.CACHE_TTL)
+            cached = await db.get_coin_data(coin)
             if cached and cached.get("price") is not None:
                 prices[coin] = float(cached["price"])
             else:
@@ -266,7 +266,7 @@ async def check_prices(app) -> None:
                             f"{symbol} moved {raw_change:+.2f}% in "
                             f"{config.format_interval(interval)} (now ${price}"
                         )
-                        cached = await db.get_coin_data(coin, max_age=config.CACHE_TTL)
+                        cached = await db.get_coin_data(coin)
                         info = cached.get("market_info") if cached else None
                         if info is None:
                             info = await api.get_market_info(coin, user=chat_id)
@@ -384,7 +384,7 @@ async def build_sub_entries(chat_id: int) -> List[Tuple[str, str]]:
     subs = await db.list_subscriptions(chat_id)
     entries: List[Tuple[str, str]] = []
     for _, coin, threshold, interval, *_ in subs:
-        cached = await db.get_coin_data(coin, max_age=config.CACHE_TTL)
+        cached = await db.get_coin_data(coin)
         info = cached.get("info") if cached else None
         market = cached.get("market_info") if cached else None
         if market is not None and not isinstance(market, dict):
@@ -451,7 +451,7 @@ async def info_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
             msg += f". Did you mean {syms}?"
         await update.message.reply_text(msg)
         return
-    cached = await db.get_coin_data(coin, max_age=config.CACHE_TTL)
+    cached = await db.get_coin_data(coin)
     data = cached.get("info") if cached else None
     market = cached.get("market_info") if cached else None
     if market is not None and not isinstance(market, dict):
@@ -505,7 +505,7 @@ async def chart_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
         except ValueError:
             await update.message.reply_text(f"{ERROR_EMOJI} Days must be a number")
             return
-    cached = await db.get_coin_data(coin, max_age=config.CACHE_TTL)
+    cached = await db.get_coin_data(coin)
     if days == 7 and cached and cached.get("chart_7d") is not None:
         data = [(p[0], p[1]) for p in cached["chart_7d"]]
         err = None

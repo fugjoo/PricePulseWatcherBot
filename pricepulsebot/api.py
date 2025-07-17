@@ -185,7 +185,7 @@ async def get_coin_info(
     *,
     user: Optional[int] = None,
 ) -> tuple[Optional[dict], Optional[str]]:
-    cached = await db.get_coin_info(coin, max_age=config.CACHE_TTL)
+    cached = await db.get_coin_info(coin)
     if cached:
         return cached, None
     url = f"{config.COINGECKO_BASE_URL}/coins/{encoded(coin)}"
@@ -287,7 +287,7 @@ async def get_market_chart(
     *,
     user: Optional[int] = None,
 ) -> tuple[Optional[list[tuple[float, float]]], Optional[str]]:
-    cached = await db.get_coin_chart(coin, days, max_age=config.CACHE_TTL)
+    cached = await db.get_coin_chart(coin, days)
     if cached is not None:
         return [(p[0], p[1]) for p in cached], None
     end_ts = int(time.time())
@@ -322,7 +322,7 @@ async def get_global_overview(
     *,
     user: Optional[int] = None,
 ) -> tuple[Optional[dict], Optional[str]]:
-    cached = await db.get_global_data(max_age=config.CACHE_TTL)
+    cached = await db.get_global_data()
     if cached:
         return cached, None
     url = f"{config.COINGECKO_BASE_URL}/global"
@@ -454,7 +454,7 @@ async def fetch_trending_coins() -> Optional[list[dict]]:
         config.logger.error("error fetching trending coins: %s", exc)
     except RuntimeError as err:
         config.logger.warning("trending request failed: %s", err)
-    cached = await db.get_trending_coins(max_age=config.CACHE_TTL)
+    cached = await db.get_trending_coins()
     if cached:
         for item in cached:
             coin_id = item.get("id")

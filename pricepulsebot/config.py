@@ -35,7 +35,6 @@ BOT_NAME = "PricePulseWatcherBot"
 DEFAULT_THRESHOLD = float(os.getenv("DEFAULT_THRESHOLD", "0.1"))
 DEFAULT_INTERVAL = parse_duration(os.getenv("DEFAULT_INTERVAL", "5m"))
 PRICE_CHECK_INTERVAL = parse_duration(os.getenv("PRICE_CHECK_INTERVAL", "60s"))
-CACHE_TTL = parse_duration(os.getenv("CACHE_TTL", "300s"))
 
 COINGECKO_API_KEY = os.getenv("COINGECKO_API_KEY")
 COINGECKO_BASE_URL = (
