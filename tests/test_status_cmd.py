@@ -38,10 +38,20 @@ class DummyContext:
 async def test_status_cmd_basic():
     api.STATUS_HISTORY.clear()
     now = time.time()
-    api.STATUS_HISTORY.extend([(now, 200), (now, 429), (now, 500)])
+    api.STATUS_HISTORY.extend(
+        [
+            (now - api.STATUS_WINDOW - 1, 200),
+            (now - 1800, 429),
+            (now - 10, 500),
+        ]
+    )
     bot = DummyBot()
     update = DummyUpdate()
     ctx = DummyContext(bot)
     await handlers.status_cmd(update, ctx)
     assert bot.photos
     assert update.message.texts
+    counts = api.status_counts()
+    assert 200 not in counts
+    assert counts[429] == 1
+    assert counts[500] == 1

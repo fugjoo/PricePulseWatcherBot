@@ -899,7 +899,7 @@ async def status_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None
     plt.bar([str(c) for c in codes], [counts[c] for c in codes])
     plt.xlabel("HTTP status")
     plt.ylabel("Count")
-    plt.title("Recent API responses")
+    plt.title("API responses")
     plt.tight_layout()
     buf = BytesIO()
     plt.savefig(buf, format="png")

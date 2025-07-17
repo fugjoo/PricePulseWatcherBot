@@ -20,12 +20,17 @@ from . import config, db
 PRICE_CACHE: Dict[str, Tuple[float, float]] = {}
 COINGECKO_LIMITER = AsyncLimiter(30, 60)
 LAST_KNOWN_PRICE: Dict[str, float] = {}
-STATUS_HISTORY: Deque[Tuple[float, int]] = deque(maxlen=100)
+STATUS_WINDOW = 3 * 3600  # 3 hours
+STATUS_HISTORY: Deque[Tuple[float, int]] = deque()
 
 
 def status_counts() -> Dict[int, int]:
-    """Return a mapping of HTTP status codes to occurrence counts."""
+    """Return counts of API statuses recorded within the last window."""
+    cutoff = time.time() - STATUS_WINDOW
     counts: Dict[int, int] = {}
+    # purge old entries while iterating
+    while STATUS_HISTORY and STATUS_HISTORY[0][0] < cutoff:
+        STATUS_HISTORY.popleft()
     for _, status in STATUS_HISTORY:
         counts[status] = counts.get(status, 0) + 1
     return counts
@@ -139,6 +144,10 @@ async def api_get(
             else:
                 resp = await session.get(url, headers=headers)
             STATUS_HISTORY.append((time.time(), resp.status))
+            cutoff = time.time() - STATUS_WINDOW
+            while STATUS_HISTORY and STATUS_HISTORY[0][0] < cutoff:
+                STATUS_HISTORY.popleft()
+
             config.logger.info(
                 "api_request user=%s url=%s status=%s", user, url, resp.status
             )
@@ -150,6 +159,9 @@ async def api_get(
         return resp
     except aiohttp.ClientError as exc:
         STATUS_HISTORY.append((time.time(), 0))
+        cutoff = time.time() - STATUS_WINDOW
+        while STATUS_HISTORY and STATUS_HISTORY[0][0] < cutoff:
+            STATUS_HISTORY.popleft()
         config.logger.error("api request failed: %s", exc)
         return None
     finally:
