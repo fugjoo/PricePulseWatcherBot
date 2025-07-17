@@ -20,12 +20,17 @@ from . import config, db
 PRICE_CACHE: Dict[str, Tuple[float, float]] = {}
 COINGECKO_LIMITER = AsyncLimiter(30, 60)
 LAST_KNOWN_PRICE: Dict[str, float] = {}
-STATUS_HISTORY: Deque[Tuple[float, int]] = deque(maxlen=100)
+STATUS_WINDOW = 3 * 3600  # 3 hours
+STATUS_HISTORY: Deque[Tuple[float, int]] = deque()
 
 
 def status_counts() -> Dict[int, int]:
-    """Return a mapping of HTTP status codes to occurrence counts."""
+    """Return counts of API statuses recorded within the last window."""
+    cutoff = time.time() - STATUS_WINDOW
     counts: Dict[int, int] = {}
+    # purge old entries while iterating
+    while STATUS_HISTORY and STATUS_HISTORY[0][0] < cutoff:
+        STATUS_HISTORY.popleft()
     for _, status in STATUS_HISTORY:
         counts[status] = counts.get(status, 0) + 1
     return counts
@@ -139,6 +144,10 @@ async def api_get(
             else:
                 resp = await session.get(url, headers=headers)
             STATUS_HISTORY.append((time.time(), resp.status))
+            cutoff = time.time() - STATUS_WINDOW
+            while STATUS_HISTORY and STATUS_HISTORY[0][0] < cutoff:
+                STATUS_HISTORY.popleft()
+
             config.logger.info(
                 "api_request user=%s url=%s status=%s", user, url, resp.status
             )
@@ -150,6 +159,9 @@ async def api_get(
         return resp
     except aiohttp.ClientError as exc:
         STATUS_HISTORY.append((time.time(), 0))
+        cutoff = time.time() - STATUS_WINDOW
+        while STATUS_HISTORY and STATUS_HISTORY[0][0] < cutoff:
+            STATUS_HISTORY.popleft()
         config.logger.error("api request failed: %s", exc)
         return None
     finally:
@@ -186,7 +198,7 @@ async def get_price(
 
     url = (
         f"{config.COINGECKO_BASE_URL}/simple/price"
-        f"?ids={encoded(coin)}&vs_currencies=usd"
+        f"?ids={encoded(coin)}&vs_currencies={config.VS_CURRENCY}"
     )
     headers = config.COINGECKO_HEADERS
     key = coin
@@ -201,7 +213,7 @@ async def get_price(
                 return None
             if resp.status == 200:
                 data = await resp.json()
-                price = data.get(key, {}).get("usd")
+                price = data.get(key, {}).get(config.VS_CURRENCY)
                 if price is not None:
                     price = float(price)
                     PRICE_CACHE[coin] = (price, time.time())
@@ -237,7 +249,7 @@ async def get_prices(
         Mapping of coin ID to its current price.
     """
     ids = ",".join(encoded(c) for c in coins)
-    url = f"{config.COINGECKO_BASE_URL}/simple/price?ids={ids}&vs_currencies=usd"
+    url = f"{config.COINGECKO_BASE_URL}/simple/price?ids={ids}&vs_currencies={config.VS_CURRENCY}"
     retries = 3
     owns_session = session is None
     if owns_session:
@@ -254,7 +266,7 @@ async def get_prices(
                 now = time.time()
                 result = {}
                 for coin in coins:
-                    price = data.get(coin, {}).get("usd")
+                    price = data.get(coin, {}).get(config.VS_CURRENCY)
                     if price is not None:
                         price = float(price)
                         PRICE_CACHE[coin] = (price, now)
@@ -293,7 +305,7 @@ async def get_markets(
     ids = ",".join(encoded(c) for c in coins)
     url = (
         f"{config.COINGECKO_BASE_URL}/coins/markets"
-        f"?vs_currency=usd&ids={ids}&price_change_percentage=24h"
+        f"?vs_currency={config.VS_CURRENCY}&ids={ids}&price_change_percentage=24h"
     )
     retries = 3
     owns_session = session is None
@@ -435,7 +447,7 @@ async def get_market_info(
     """Return market data for ``coin`` such as price and 24h change."""
     url = (
         f"{config.COINGECKO_BASE_URL}/coins/markets"
-        f"?vs_currency=usd&ids={encoded(coin)}&price_change_percentage=24h"
+        f"?vs_currency={config.VS_CURRENCY}&ids={encoded(coin)}&price_change_percentage=24h"
     )
     headers = config.COINGECKO_HEADERS
     owns_session = session is None
@@ -487,7 +499,7 @@ async def get_market_chart(
     start_ts = end_ts - days * 86400
     url = (
         f"{config.COINGECKO_BASE_URL}/coins/{encoded(coin)}/market_chart/range"
-        f"?vs_currency=usd&from={start_ts}&to={end_ts}"
+        f"?vs_currency={config.VS_CURRENCY}&from={start_ts}&to={end_ts}"
     )
     headers = config.COINGECKO_HEADERS
     owns_session = session is None
@@ -657,7 +669,7 @@ async def fetch_trending_coins() -> Optional[list[dict]]:
             if ids:
                 markets_url = (
                     f"{config.COINGECKO_BASE_URL}/coins/markets"
-                    f"?vs_currency=usd&ids={','.join(ids)}&price_change_percentage=24h"
+                    f"?vs_currency={config.VS_CURRENCY}&ids={','.join(ids)}&price_change_percentage=24h"
                 )
                 market_resp = await api_get(
                     markets_url, session=session, headers=config.COINGECKO_HEADERS
@@ -708,7 +720,7 @@ async def fetch_top_coins() -> None:
     """Update :data:`config.TOP_COINS` with high market cap coins."""
     url = (
         f"{config.COINGECKO_BASE_URL}/coins/markets"
-        "?vs_currency=usd&order=market_cap_desc&per_page=50&page=1"
+        f"?vs_currency={config.VS_CURRENCY}&order=market_cap_desc&per_page=50&page=1"
     )
     try:
         async with aiohttp.ClientSession() as session:
@@ -766,12 +778,19 @@ async def get_news(
 
 
 async def refresh_coin_data(coin: str) -> None:
+
     """Refresh cached price, market info and chart data for ``coin``."""
-    async with aiohttp.ClientSession() as session:
+    owns_session = session is None
+    if owns_session:
+        session = aiohttp.ClientSession()
+    try:
         price = await get_price(coin, session=session, user=None)
         market_info = await get_market_info(coin, session=session, user=None)
         info, _ = await get_coin_info(coin, session=session, user=None)
         chart, _ = await get_market_chart(coin, 7, session=session, user=None)
+    finally:
+        if owns_session and session:
+            await session.close()
     await db.set_coin_data(
         coin,
         {

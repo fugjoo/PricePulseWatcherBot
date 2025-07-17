@@ -130,9 +130,9 @@ def trend_emojis(change: float) -> str:
 
 
 def usd_value(value: Optional[object]) -> Optional[float]:
-    """Return the USD float when given either a number or a dict."""
+    """Return the configured currency float when given either a number or a dict."""
     if isinstance(value, dict):
-        return value.get("usd")
+        return value.get(config.VS_CURRENCY)
     if isinstance(value, (int, float)):
         return float(value)
     return None
@@ -216,17 +216,47 @@ async def check_prices(app) -> None:
     async with aiohttp.ClientSession() as http_session:
         async with db.aiosqlite.connect(config.DB_FILE) as database:
             cursor = await database.execute(
-                "SELECT id, chat_id, coin_id, threshold, interval, last_price, "
-                "last_alert_ts FROM subscriptions"
+                "SELECT id, chat_id, coin_id, threshold, interval, target_price, direction, last_price, last_alert_ts FROM subscriptions"
             )
             rows = await cursor.fetchall()
             await cursor.close()
         by_coin: Dict[
-            str, List[Tuple[int, int, float, int, Optional[float], Optional[float]]]
+            str,
+            List[
+                Tuple[
+                    int,
+                    int,
+                    float,
+                    int,
+                    Optional[float],
+                    Optional[int],
+                    Optional[float],
+                    Optional[float],
+                ]
+            ],
         ] = {}
-        for sub_id, chat_id, coin, threshold, interval, last_price, last_ts in rows:
+        for (
+            sub_id,
+            chat_id,
+            coin,
+            threshold,
+            interval,
+            target_price,
+            direction,
+            last_price,
+            last_ts,
+        ) in rows:
             by_coin.setdefault(coin, []).append(
-                (sub_id, chat_id, threshold, interval, last_price, last_ts)
+                (
+                    sub_id,
+                    chat_id,
+                    threshold,
+                    interval,
+                    target_price,
+                    direction,
+                    last_price,
+                    last_ts,
+                )
             )
         coins = list(by_coin.keys())
         prices: Dict[str, float] = {}
@@ -264,6 +294,8 @@ async def check_prices(app) -> None:
                 chat_id,
                 threshold,
                 interval,
+                target_price,
+                direction,
                 last_price,
                 last_ts,
             ) in subscriptions:
@@ -292,6 +324,27 @@ async def check_prices(app) -> None:
                                 app.bot, chat_id, msg, emoji=f"{DOWN_ARROW} {BOMB}"
                             )
                 MILESTONE_CACHE[(chat_id, coin)] = price
+                if target_price is not None and direction is not None:
+                    crossed_up = direction > 0 and prev < target_price <= price
+                    crossed_down = direction < 0 and prev > target_price >= price
+                    if crossed_up or crossed_down:
+                        symbol = api.symbol_for(coin)
+                        if crossed_up:
+                            msg = (
+                                f"{symbol} reached ${format_price(target_price)} "
+                                f"(now ${format_price(price)})"
+                            )
+                            await send_rate_limited(
+                                app.bot, chat_id, msg, emoji=f"{UP_ARROW} {ROCKET}"
+                            )
+                        elif crossed_down:
+                            msg = (
+                                f"{symbol} fell below ${format_price(target_price)} "
+                                f"(now ${format_price(price)})"
+                            )
+                            await send_rate_limited(
+                                app.bot, chat_id, msg, emoji=f"{DOWN_ARROW} {BOMB}"
+                            )
                 if last_ts is None or time.time() - last_ts >= interval:
                     raw_change = (price - last_price) / last_price * 100
                     change = abs(raw_change)
@@ -322,8 +375,9 @@ async def refresh_cache(app) -> None:
         cursor = await database.execute("SELECT DISTINCT coin_id FROM subscriptions")
         coins = [row[0] for row in await cursor.fetchall()]
         await cursor.close()
-    for coin in coins:
-        await api.refresh_coin_data(coin)
+    async with aiohttp.ClientSession() as session:
+        for coin in coins:
+            await api.refresh_coin_data(coin, session=session)
     await api.get_global_overview(user=None)
 
 
@@ -383,18 +437,34 @@ async def subscribe_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE) -> N
             msg += f". Did you mean {syms}?"
         await update.message.reply_text(msg)
         return
-    try:
-        threshold = (
-            float(context.args[1])
-            if len(context.args) > 1
-            else config.DEFAULT_THRESHOLD
-        )
-    except ValueError:
-        await update.message.reply_text(f"{ERROR_EMOJI} Threshold must be a number")
-        return
+    target_price = None
+    direction = None
+    threshold = config.DEFAULT_THRESHOLD
+    arg_idx = 1
+    if len(context.args) > 1:
+        arg = context.args[1]
+        if arg and arg[0] in {">", "<"}:
+            try:
+                target_price = float(arg[1:])
+            except ValueError:
+                await update.message.reply_text(f"{ERROR_EMOJI} Invalid target price")
+                return
+            direction = 1 if arg[0] == ">" else -1
+            arg_idx = 2
+        else:
+            try:
+                threshold = float(arg)
+            except ValueError:
+                await update.message.reply_text(
+                    f"{ERROR_EMOJI} Threshold must be a number"
+                )
+                return
+            arg_idx = 2
     try:
         interval_str = (
-            context.args[2] if len(context.args) > 2 else str(config.DEFAULT_INTERVAL)
+            context.args[arg_idx]
+            if len(context.args) > arg_idx
+            else str(config.DEFAULT_INTERVAL)
         )
         interval = config.parse_duration(interval_str)
     except ValueError:
@@ -402,7 +472,14 @@ async def subscribe_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE) -> N
             f"{ERROR_EMOJI} Interval must be a number or like 1h, 15m, 30s"
         )
         return
-    await db.subscribe_coin(update.effective_chat.id, coin, threshold, interval)
+    await db.subscribe_coin(
+        update.effective_chat.id,
+        coin,
+        threshold,
+        interval,
+        target_price,
+        direction,
+    )
     await update.message.reply_text(
         f"{SUB_EMOJI} Subscribed to {api.symbol_for(coin)}",
         reply_markup=get_keyboard(),
@@ -418,6 +495,15 @@ async def unsubscribe_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
     await db.unsubscribe_coin(update.effective_chat.id, coin)
     await update.message.reply_text(
         f"{SUCCESS_EMOJI} Unsubscribed from {api.symbol_for(coin)} alerts",
+        reply_markup=get_keyboard(),
+    )
+
+
+async def clear_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    """Remove all subscriptions for the chat."""
+    await db.unsubscribe_all(update.effective_chat.id)
+    await update.message.reply_text(
+        f"{SUCCESS_EMOJI} Removed all subscriptions",
         reply_markup=get_keyboard(),
     )
 
@@ -596,8 +682,8 @@ async def global_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None
         await update.message.reply_text(f"{ERROR_EMOJI} Failed to fetch data")
         return
     info = data.get("data", {})
-    cap = info.get("total_market_cap", {}).get("usd")
-    volume = info.get("total_volume", {}).get("usd")
+    cap = info.get("total_market_cap", {}).get(config.VS_CURRENCY)
+    volume = info.get("total_volume", {}).get(config.VS_CURRENCY)
     btc_dom = info.get("market_cap_percentage", {}).get("btc")
     cap_change = info.get("market_cap_change_percentage_24h_usd")
     active = info.get("active_cryptocurrencies")
@@ -746,13 +832,14 @@ async def settings_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE) -> No
             f"- threshold: ±{config.DEFAULT_THRESHOLD}%\n"
             f"- interval: {config.format_interval(config.DEFAULT_INTERVAL)}\n"
             f"- pricecheck: {config.format_interval(config.PRICE_CHECK_INTERVAL)}\n"
-            f"- milestones: {'on' if config.ENABLE_MILESTONE_ALERTS else 'off'}"
+            f"- milestones: {'on' if config.ENABLE_MILESTONE_ALERTS else 'off'}\n"
+            f"- currency: {config.VS_CURRENCY}"
         )
         await update.message.reply_text(text)
         return
     if len(context.args) < 2:
         await update.message.reply_text(
-            f"{ERROR_EMOJI} Usage: /settings <threshold|interval|milestones> <value>"
+            f"{ERROR_EMOJI} Usage: /settings <threshold|interval|milestones|currency> <value>"
         )
         return
     key = context.args[0].lower()
@@ -788,6 +875,11 @@ async def settings_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE) -> No
         config.ENABLE_MILESTONE_ALERTS = val == "on"
         state = "enabled" if config.ENABLE_MILESTONE_ALERTS else "disabled"
         await update.message.reply_text(f"{SUCCESS_EMOJI} Milestone alerts {state}")
+    elif key == "currency":
+        config.VS_CURRENCY = value.lower()
+        await update.message.reply_text(
+            f"{SUCCESS_EMOJI} Default currency set to {config.VS_CURRENCY}"
+        )
     elif key == "pricecheck":
         await update.message.reply_text(
             f"{ERROR_EMOJI} PRICE_CHECK_INTERVAL cannot be changed"
@@ -807,7 +899,7 @@ async def status_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None
     plt.bar([str(c) for c in codes], [counts[c] for c in codes])
     plt.xlabel("HTTP status")
     plt.ylabel("Count")
-    plt.title("Recent API responses")
+    plt.title("API responses")
     plt.tight_layout()
     buf = BytesIO()
     plt.savefig(buf, format="png")
