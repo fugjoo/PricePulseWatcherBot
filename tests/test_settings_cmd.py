@@ -2,7 +2,7 @@ import pytest
 
 import pricepulsebot.config as config
 import pricepulsebot.handlers as handlers
-from pricepulsebot.handlers import InlineKeyboardMarkup
+from pricepulsebot.handlers import InlineKeyboardMarkup, ReplyKeyboardMarkup
 
 
 class DummyMessage:
@@ -128,7 +128,9 @@ async def test_settings_keyboard():
     update = DummyUpdate()
     ctx = DummyContext([])
     await handlers.settings_cmd(update, ctx)
-    assert update.message.markups and update.message.markups[0] is not None
+    assert update.message.markups and isinstance(
+        update.message.markups[0], ReplyKeyboardMarkup
+    )
 
 
 @pytest.mark.asyncio
