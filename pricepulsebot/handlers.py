@@ -382,13 +382,14 @@ async def build_sub_entries(chat_id: int) -> List[Tuple[str, str]]:
         if sym:
             line += f" ({sym.upper()})"
         line += "\n"
-        line += f"Alerts: ±{threshold}% every {config.format_interval(interval)}"
-        if price:
-            line += f" - Price: ${format_price(price)}"
-        if change_24h is not None:
-            line += f" ({change_24h:+.2f}% 24h)"
+        line += f"Alerts: ±{threshold}% every {config.format_interval(interval)}\n"
+        if price is not None:
+            line += f"Price: ${format_price(price)}"
+            if change_24h is not None:
+                line += f" ({change_24h:+.2f}% 24h)"
+            line += "\n"
         if cap is not None:
-            line += f" - Cap: ${cap:,.0f}"
+            line += f"Cap: ${cap:,.0f}"
         entries.append((coin, line))
     return entries
 
