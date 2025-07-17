@@ -218,8 +218,8 @@ async def check_prices(app) -> None:
             cursor = await database.execute(
                 (
                     "SELECT id, chat_id, coin_id, threshold, interval, "
-                    "target_price, direction, last_price, last_volume, "
-                    "last_alert_ts FROM subscriptions"
+                    "target_price, direction, last_price, last_alert_ts "
+                    "FROM subscriptions"
                 )
             )
             rows = await cursor.fetchall()
@@ -445,6 +445,7 @@ async def help_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
         "/news [coin] - latest news\n"
         "/trends - show trending coins\n"
         "/global - global market stats\n"
+        "/feargreed - market sentiment\n"
         "/status - API status overview\n"
         "/valuearea <symbol> <interval> <count> - volume profile\n"
         "Intervals can be like 1h, 15m or 30s",
@@ -736,6 +737,35 @@ async def global_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None
     await update.message.reply_text(text)
 
 
+async def feargreed_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    """Display the daily Fear & Greed Index."""
+    data, err = await api.get_feargreed_index(user=update.effective_chat.id)
+    if err:
+        await update.message.reply_text(f"{ERROR_EMOJI} {err}")
+        return
+    if not data:
+        await update.message.reply_text(f"{ERROR_EMOJI} Failed to fetch data")
+        return
+    value_str = data.get("value")
+    classification = data.get("value_classification")
+    try:
+        value = int(value_str)
+    except (TypeError, ValueError):
+        value = None
+    if value is None:
+        emoji = INFO_EMOJI
+    elif value < 40:
+        emoji = "\U0001f534"  # red
+    elif value < 60:
+        emoji = "\U0001f7e1"  # yellow
+    else:
+        emoji = "\U0001f7e2"  # green
+    text = f"{emoji} Fear & Greed Index: {value_str}"
+    if classification:
+        text += f" ({classification})"
+    await update.message.reply_text(text)
+
+
 async def trends_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     """Display the current trending coins."""
     data = await api.fetch_trending_coins()
@@ -872,7 +902,8 @@ async def settings_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE) -> No
         return
     if len(context.args) < 2:
         await update.message.reply_text(
-            f"{ERROR_EMOJI} Usage: /settings <threshold|interval|milestones|liquidations|currency> <value>"
+            f"{ERROR_EMOJI} Usage: /settings <threshold|interval|milestones|"
+            f"currency> <value>"
         )
         return
     key = context.args[0].lower()

@@ -593,6 +593,37 @@ async def get_global_overview(
             await session.close()
 
 
+async def get_feargreed_index(
+    session: Optional[aiohttp.ClientSession] = None,
+    *,
+    user: Optional[int] = None,
+) -> tuple[Optional[dict], Optional[str]]:
+    """Return the latest Fear & Greed index data."""
+    cached = await db.get_feargreed()
+    if cached:
+        return cached, None
+    url = "https://api.alternative.me/fng/?limit=1"
+    owns_session = session is None
+    if owns_session:
+        session = aiohttp.ClientSession()
+    try:
+        resp = await api_get(url, session=session, user=user)
+        if not resp:
+            return None, "request failed"
+        if resp.status == 200:
+            data = await resp.json()
+            try:
+                entry = data.get("data", [])[0]
+            except (IndexError, TypeError, AttributeError):
+                return None, "invalid response"
+            await db.set_feargreed(entry)
+            return entry, None
+        return None, f"HTTP {resp.status}"
+    finally:
+        if owns_session and session:
+            await session.close()
+
+
 async def find_coin(query: str) -> Optional[str]:
     """Look up a coin ID on CoinGecko given a query string."""
     url = f"{config.COINGECKO_BASE_URL}/search?query={quote(query, safe='')}"
@@ -820,7 +851,9 @@ async def get_news(
 
 
 async def refresh_coin_data(
-    coin: str, *, session: aiohttp.ClientSession | None = None
+
+    coin: str, session: Optional[aiohttp.ClientSession] = None
+
 ) -> None:
     """Refresh cached price, market info and chart data for ``coin``."""
 

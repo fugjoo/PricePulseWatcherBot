@@ -69,6 +69,7 @@ Create a `.env` file from the example. It holds credentials and runtime options:
 - `/news [coin]` – show latest news (uses subscriptions when omitted)
 - `/trends` – show trending coins
 - `/global` – show global market stats
+- `/feargreed` – show daily market sentiment
 - `/status` – display API status overview
 - `/milestones [on|off]` – toggle milestone notifications (no args switch)
 - `/settings [key value]` – show or change default settings (threshold,
