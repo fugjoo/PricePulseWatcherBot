@@ -356,6 +356,7 @@ async def help_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
         "/list - list subscriptions\n"
         "/info <coin> - coin information\n"
         "/chart(s) <coin> [days] - price chart\n"
+        "/news [coin] - latest news\n"
         "/trends - show trending coins\n"
         "/global - global market stats\n"
         "/status - API status overview\n"
@@ -645,6 +646,42 @@ async def trends_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None
         lines.append(line)
     text = f"{INFO_EMOJI} Trending coins:\n" + "\n".join(lines)
     await update.message.reply_text(text)
+
+
+async def news_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    """Show recent news for a coin or subscribed coins."""
+    if context.args:
+        coin_input = context.args[0]
+        coin = await api.resolve_coin(coin_input, user=update.effective_chat.id)
+        if not coin:
+            suggestions = await api.suggest_coins(coin_input)
+            msg = f"{ERROR_EMOJI} Unknown coin"
+            if suggestions:
+                syms = ", ".join(api.symbol_for(c) for c in suggestions)
+                msg += f". Did you mean {syms}?"
+            await update.message.reply_text(msg)
+            return
+        coins = [coin]
+    else:
+        subs = await db.list_subscriptions(update.effective_chat.id)
+        coins = [coin for _, coin, *_ in subs]
+        if not coins:
+            await update.message.reply_text(f"{INFO_EMOJI} No subscriptions")
+            return
+
+    async with aiohttp.ClientSession() as session:
+        for coin in coins:
+            items = await api.get_news(
+                coin, session=session, user=update.effective_chat.id
+            )
+            if not items:
+                await update.message.reply_text(
+                    f"{ERROR_EMOJI} No news for {api.symbol_for(coin)}"
+                )
+                continue
+            lines = [f"- {i.get('title')}" for i in items[:5]]
+            text = f"{INFO_EMOJI} News for {api.symbol_for(coin)}:\n" + "\n".join(lines)
+            await update.message.reply_text(text)
 
 
 async def valuearea_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:

@@ -733,6 +733,38 @@ async def fetch_top_coins() -> None:
         config.logger.error("error fetching top coins: %s", exc)
 
 
+async def get_news(
+    coin: str,
+    session: Optional[aiohttp.ClientSession] = None,
+    *,
+    user: Optional[int] = None,
+) -> Optional[list[dict]]:
+    """Return recent news articles for ``coin``.
+
+    Articles are fetched from the CryptoCompare API and returned as a list of
+    dictionaries containing at least ``title`` and ``url``.
+    """
+    symbol = symbol_for(normalize_coin(coin))
+    url = (
+        "https://min-api.cryptocompare.com/data/v2/news/?"
+        f"categories={quote(symbol.upper())}&lang=EN"
+    )
+    owns_session = session is None
+    if owns_session:
+        session = aiohttp.ClientSession()
+    try:
+        resp = await api_get(url, session=session, user=user)
+        if not resp:
+            return None
+        if resp.status == 200:
+            data = await resp.json()
+            return list(data.get("Data", []))
+    finally:
+        if owns_session and session:
+            await session.close()
+    return None
+
+
 async def refresh_coin_data(coin: str) -> None:
     """Refresh cached price, market info and chart data for ``coin``."""
     async with aiohttp.ClientSession() as session:
