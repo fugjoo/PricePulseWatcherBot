@@ -559,8 +559,7 @@ async def trends_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None
         if price is not None:
             line += f" ${format_price(price)}"
         if change_24h is not None:
-            arrow = UP_ARROW if change_24h >= 0 else DOWN_ARROW
-            line += f" {arrow} ({change_24h:+.2f}% 24h)"
+            line += f" ({change_24h:+.2f}% 24h)"
         lines.append(line)
     text = f"{INFO_EMOJI} Trending coins:\n" + "\n".join(lines)
     await update.message.reply_text(text)
