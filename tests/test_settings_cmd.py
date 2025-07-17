@@ -94,6 +94,16 @@ async def test_settings_update_liquidations():
 
 
 @pytest.mark.asyncio
+async def test_settings_update_volume():
+    update = DummyUpdate()
+    ctx = DummyContext(["volume", "off"])
+    prev = config.ENABLE_VOLUME_ALERTS
+    await handlers.settings_cmd(update, ctx)
+    assert config.ENABLE_VOLUME_ALERTS is False
+    config.ENABLE_VOLUME_ALERTS = prev
+
+
+@pytest.mark.asyncio
 async def test_settings_pricecheck_readonly():
     update = DummyUpdate()
     ctx = DummyContext(["pricecheck", "30s"])
@@ -133,3 +143,17 @@ async def test_settings_button_toggle_milestones():
     assert isinstance(query.reply_markup, InlineKeyboardMarkup)
     assert bot.sent
     config.ENABLE_MILESTONE_ALERTS = prev
+
+
+@pytest.mark.asyncio
+async def test_settings_button_toggle_volume():
+    bot = DummyBot()
+    query = DummyCallbackQuery("settings:volume")
+    update = DummyCallbackUpdate(query)
+    ctx = DummyContext([], bot)
+    prev = config.ENABLE_VOLUME_ALERTS
+    await handlers.button(update, ctx)
+    assert config.ENABLE_VOLUME_ALERTS != prev
+    assert isinstance(query.reply_markup, InlineKeyboardMarkup)
+    assert bot.sent
+    config.ENABLE_VOLUME_ALERTS = prev

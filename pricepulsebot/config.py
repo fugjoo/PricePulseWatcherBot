@@ -47,6 +47,7 @@ ENABLE_MILESTONE_ALERTS = os.getenv("ENABLE_MILESTONE_ALERTS", "true").lower() =
 ENABLE_LIQUIDATION_ALERTS = (
     os.getenv("ENABLE_LIQUIDATION_ALERTS", "false").lower() == "true"
 )
+ENABLE_VOLUME_ALERTS = os.getenv("ENABLE_VOLUME_ALERTS", "true").lower() == "true"
 VS_CURRENCY = os.getenv("DEFAULT_VS_CURRENCY", "usd").lower()
 
 COINGECKO_API_KEY = os.getenv("COINGECKO_API_KEY")
