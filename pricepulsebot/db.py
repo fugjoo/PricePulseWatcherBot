@@ -20,6 +20,8 @@ async def init_db() -> None:
                 coin_id TEXT NOT NULL,
                 threshold REAL NOT NULL,
                 interval INTEGER NOT NULL DEFAULT 60,
+                target_price REAL,
+                direction INTEGER,
                 last_price REAL,
                 last_alert_ts REAL
             )
@@ -86,17 +88,26 @@ async def init_db() -> None:
                 "ALTER TABLE subscriptions "
                 "ADD COLUMN interval INTEGER NOT NULL DEFAULT 60"
             )
+        if "target_price" not in columns:
+            await db.execute("ALTER TABLE subscriptions ADD COLUMN target_price REAL")
+        if "direction" not in columns:
+            await db.execute("ALTER TABLE subscriptions ADD COLUMN direction INTEGER")
         await db.commit()
 
 
 async def subscribe_coin(
-    chat_id: int, coin: str, threshold: float, interval: int
+    chat_id: int,
+    coin: str,
+    threshold: float,
+    interval: int,
+    target_price: Optional[float] = None,
+    direction: Optional[int] = None,
 ) -> None:
     """Add or update a subscription for ``chat_id`` and ``coin``."""
     async with aiosqlite.connect(config.DB_FILE) as db:
         cursor = await db.execute(
             (
-                "SELECT id, threshold, interval "
+                "SELECT id, threshold, interval, target_price, direction "
                 "FROM subscriptions WHERE chat_id=? AND coin_id=?"
             ),
             (chat_id, coin),
@@ -104,28 +115,32 @@ async def subscribe_coin(
         row = await cursor.fetchone()
         await cursor.close()
         if row:
-            sub_id, existing_th, existing_int = row
+            sub_id, existing_th, existing_int, existing_price, existing_dir = row
             new_th = min(existing_th, threshold)
             new_int = min(existing_int, interval)
+            new_price = target_price if target_price is not None else existing_price
+            new_dir = direction if direction is not None else existing_dir
             await db.execute(
-                "UPDATE subscriptions SET threshold=?, interval=? WHERE id=?",
-                (new_th, new_int, sub_id),
+                "UPDATE subscriptions SET threshold=?, interval=?, target_price=?, direction=? WHERE id=?",
+                (new_th, new_int, new_price, new_dir, sub_id),
             )
         else:
             await db.execute(
                 (
-                    "INSERT INTO subscriptions (chat_id, coin_id, threshold, interval)"
-                    " VALUES (?, ?, ?, ?)"
+                    "INSERT INTO subscriptions (chat_id, coin_id, threshold, interval, target_price, direction)"
+                    " VALUES (?, ?, ?, ?, ?, ?)"
                 ),
-                (chat_id, coin, threshold, interval),
+                (chat_id, coin, threshold, interval, target_price, direction),
             )
         await db.commit()
     config.logger.info(
-        "chat %s subscribed to %s at ±%s%% every %ss",
+        "chat %s subscribed to %s at ±%s%% every %ss target=%s dir=%s",
         chat_id,
         coin,
         threshold,
         interval,
+        target_price,
+        direction,
     )
 
 
