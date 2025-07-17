@@ -42,10 +42,10 @@ async def test_check_prices_interval_in_message(tmp_path, monkeypatch):
         )
         await conn.commit()
 
-    async def fake_price(coin, user=None):
-        return 105.0
+    async def fake_prices(coins, session=None, user=None):
+        return {c: 105.0 for c in coins}
 
-    monkeypatch.setattr(api, "get_price", fake_price)
+    monkeypatch.setattr(api, "get_prices", fake_prices)
     bot = DummyBot()
     app = DummyApp(bot)
     await handlers.check_prices(app)

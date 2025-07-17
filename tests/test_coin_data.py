@@ -78,7 +78,7 @@ async def test_check_prices_uses_cached_data(tmp_path, monkeypatch):
     async def fail(*args, **kwargs):
         raise AssertionError("network called")
 
-    monkeypatch.setattr(api, "get_price", fail)
+    monkeypatch.setattr(api, "get_prices", fail)
     monkeypatch.setattr(api, "get_market_info", fail)
 
     bot = DummyBot()

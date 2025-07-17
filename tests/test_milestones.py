@@ -1,5 +1,4 @@
-from pricepulsebot.handlers import (format_price, milestone_step,
-                                    milestones_crossed)
+from pricepulsebot.handlers import format_price, milestone_step, milestones_crossed
 
 
 def test_milestone_step():
