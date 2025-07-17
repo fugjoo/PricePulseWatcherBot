@@ -314,10 +314,11 @@ async def check_prices(app) -> None:
                         prices[c] = float(price)
                     infos[c] = info
         volumes: Dict[str, float] = {}
-        for coin in coins:
-            vol = await api.get_volume(coin, session=http_session, user=None)
-            if vol is not None:
-                volumes[coin] = vol
+        if config.ENABLE_VOLUME_ALERTS:
+            for coin in coins:
+                vol = await api.get_volume(coin, session=http_session, user=None)
+                if vol is not None:
+                    volumes[coin] = vol
         for coin, subscriptions in by_coin.items():
             price = prices.get(coin)
             if price is None:
@@ -401,24 +402,25 @@ async def check_prices(app) -> None:
                         await send_rate_limited(
                             app.bot, chat_id, text, emoji=trend_emojis(raw_change)
                         )
-                    if (
-                        volume is not None
-                        and last_volume is not None
-                        and last_volume > 0
-                    ):
-                        raw_vol_change = (volume - last_volume) / last_volume * 100
-                        if abs(raw_vol_change) >= config.VOLUME_THRESHOLD:
-                            symbol = api.symbol_for(coin)
-                            msg = (
-                                f"{symbol} volume {raw_vol_change:+.2f}% "
-                                f"(24h {volume:,.0f})"
-                            )
-                            await send_rate_limited(
-                                app.bot,
-                                chat_id,
-                                msg,
-                                emoji=trend_emojis(raw_vol_change),
-                            )
+                    if config.ENABLE_VOLUME_ALERTS:
+                        if (
+                            volume is not None
+                            and last_volume is not None
+                            and last_volume > 0
+                        ):
+                            raw_vol_change = (volume - last_volume) / last_volume * 100
+                            if abs(raw_vol_change) >= config.VOLUME_THRESHOLD:
+                                symbol = api.symbol_for(coin)
+                                msg = (
+                                    f"{symbol} volume {raw_vol_change:+.2f}% "
+                                    f"(24h {volume:,.0f})"
+                                )
+                                await send_rate_limited(
+                                    app.bot,
+                                    chat_id,
+                                    msg,
+                                    emoji=trend_emojis(raw_vol_change),
+                                )
                     await db.set_last_price(sub_id, price, volume)
 
 
@@ -469,6 +471,12 @@ def get_settings_keyboard() -> InlineKeyboardMarkup:
             InlineKeyboardButton(
                 f"milestones: {'on' if config.ENABLE_MILESTONE_ALERTS else 'off'}",
                 callback_data="settings:milestones",
+            )
+        ],
+        [
+            InlineKeyboardButton(
+                f"volume: {'on' if config.ENABLE_VOLUME_ALERTS else 'off'}",
+                callback_data="settings:volume",
             )
         ],
         [
@@ -955,7 +963,8 @@ async def settings_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE) -> No
     if len(context.args) < 2:
         usage = (
             f"{ERROR_EMOJI} Usage: "
-            "/settings <threshold|interval|milestones|currency> <value>"
+            "/settings <threshold|interval|milestones|volume|liquidations|"
+            "currency> <value>"
         )
         await update.message.reply_text(usage)
         return
@@ -992,6 +1001,14 @@ async def settings_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE) -> No
         config.ENABLE_MILESTONE_ALERTS = val == "on"
         state = "enabled" if config.ENABLE_MILESTONE_ALERTS else "disabled"
         await update.message.reply_text(f"{SUCCESS_EMOJI} Milestone alerts {state}")
+    elif key == "volume":
+        val = value.lower()
+        if val not in {"on", "off"}:
+            await update.message.reply_text(f"{ERROR_EMOJI} Volume must be on or off")
+            return
+        config.ENABLE_VOLUME_ALERTS = val == "on"
+        state = "enabled" if config.ENABLE_VOLUME_ALERTS else "disabled"
+        await update.message.reply_text(f"{SUCCESS_EMOJI} Volume alerts {state}")
     elif key == "liquidations":
         val = value.lower()
         if val not in {"on", "off"}:
@@ -1096,6 +1113,10 @@ async def button(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
             config.ENABLE_MILESTONE_ALERTS = not config.ENABLE_MILESTONE_ALERTS
             state = "enabled" if config.ENABLE_MILESTONE_ALERTS else "disabled"
             text = f"{SUCCESS_EMOJI} Milestone alerts {state}"
+        elif key == "volume":
+            config.ENABLE_VOLUME_ALERTS = not config.ENABLE_VOLUME_ALERTS
+            state = "enabled" if config.ENABLE_VOLUME_ALERTS else "disabled"
+            text = f"{SUCCESS_EMOJI} Volume alerts {state}"
         elif key == "liquidations":
             config.ENABLE_LIQUIDATION_ALERTS = not config.ENABLE_LIQUIDATION_ALERTS
             state = "enabled" if config.ENABLE_LIQUIDATION_ALERTS else "disabled"

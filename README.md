@@ -31,6 +31,7 @@ cp .env.example .env             # edit TELEGRAM_TOKEN
 # VOLUME_THRESHOLD sets the volume change percentage for alerts
 # PRICE_CHECK_INTERVAL sets how often prices are fetched
 # ENABLE_MILESTONE_ALERTS toggles milestone notifications
+# ENABLE_VOLUME_ALERTS toggles volume alerts
 # ENABLE_LIQUIDATION_ALERTS toggles futures liquidation alerts
 # DEFAULT_VS_CURRENCY sets the reference currency used for prices
 python run.py
@@ -55,6 +56,7 @@ Create a `.env` file from the example. It holds credentials and runtime options:
 - `DEFAULT_INTERVAL` – subscription interval when none is given
 - `PRICE_CHECK_INTERVAL` – how often prices are checked
 - `ENABLE_MILESTONE_ALERTS` – send messages for price milestones
+- `ENABLE_VOLUME_ALERTS` – enable volume change alerts
 - `ENABLE_LIQUIDATION_ALERTS` – enable liquidation event alerts
 - `DEFAULT_VS_CURRENCY` – default currency used for API requests
 
@@ -72,7 +74,8 @@ Create a `.env` file from the example. It holds credentials and runtime options:
 - `/feargreed` – show daily market sentiment
 - `/status` – display API status overview
 - `/settings [key value]` – show or change default settings (threshold,
-  interval, milestones, liquidations, currency)
+ `/settings [key value]` – show or change default settings (threshold,
+  interval, milestones, volume, liquidations, currency)
 
 Intervals accept plain seconds or values like `1h`, `15m` or `30s`.
 
