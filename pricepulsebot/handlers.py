@@ -11,8 +11,14 @@ import aiohttp
 import numpy as np
 from matplotlib import dates as mdates
 from matplotlib import pyplot as plt
-from telegram import (Bot, InlineKeyboardButton, InlineKeyboardMarkup,
-                      KeyboardButton, ReplyKeyboardMarkup, Update)
+from telegram import (
+    Bot,
+    InlineKeyboardButton,
+    InlineKeyboardMarkup,
+    KeyboardButton,
+    ReplyKeyboardMarkup,
+    Update,
+)
 from telegram.constants import ChatAction
 from telegram.ext import ContextTypes
 
@@ -223,20 +229,13 @@ async def check_prices(app) -> None:
             else:
                 missing.append(coin)
         if missing:
-            if len(missing) > 1:
-                groups = [
-                    missing[i : i + 250]  # noqa: E203
-                    for i in range(0, len(missing), 250)
-                ]
-                for group in groups:
-                    prices.update(
-                        await api.get_prices(group, session=http_session, user=None)
-                    )
-            else:
-                coin = missing[0]
-                price = await api.get_price(coin, user=None)
-                if price is not None:
-                    prices[coin] = price
+            groups = [
+                missing[i : i + 250] for i in range(0, len(missing), 250)  # noqa: E203
+            ]
+            for group in groups:
+                prices.update(
+                    await api.get_prices(group, session=http_session, user=None)
+                )
         for coin, subscriptions in by_coin.items():
             price = prices.get(coin)
             if price is None:
