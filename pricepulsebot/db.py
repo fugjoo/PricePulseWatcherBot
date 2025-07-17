@@ -1,3 +1,5 @@
+"""Asynchronous SQLite helpers for caching coin data and subscriptions."""
+
 import json
 import time
 from typing import List, Optional, Tuple
@@ -8,6 +10,7 @@ from . import config
 
 
 async def init_db() -> None:
+    """Create database tables if they do not already exist."""
     async with aiosqlite.connect(config.DB_FILE) as db:
         await db.execute(
             """
@@ -89,6 +92,7 @@ async def init_db() -> None:
 async def subscribe_coin(
     chat_id: int, coin: str, threshold: float, interval: int
 ) -> None:
+    """Add or update a subscription for ``chat_id`` and ``coin``."""
     async with aiosqlite.connect(config.DB_FILE) as db:
         cursor = await db.execute(
             (
@@ -126,6 +130,7 @@ async def subscribe_coin(
 
 
 async def unsubscribe_coin(chat_id: int, coin: str) -> None:
+    """Remove a subscription for ``chat_id`` and ``coin``."""
     async with aiosqlite.connect(config.DB_FILE) as db:
         await db.execute(
             "DELETE FROM subscriptions WHERE chat_id=? AND coin_id=?",
@@ -138,6 +143,7 @@ async def unsubscribe_coin(chat_id: int, coin: str) -> None:
 async def list_subscriptions(
     chat_id: int,
 ) -> List[Tuple[int, str, float, int, Optional[float], Optional[float]]]:
+    """Return all subscriptions for ``chat_id``."""
     async with aiosqlite.connect(config.DB_FILE) as db:
         cursor = await db.execute(
             (
@@ -152,6 +158,7 @@ async def list_subscriptions(
 
 
 async def set_last_price(sub_id: int, price: float) -> None:
+    """Update the stored last price for a subscription."""
     async with aiosqlite.connect(config.DB_FILE) as db:
         await db.execute(
             "UPDATE subscriptions SET last_price=?, last_alert_ts=? WHERE id=?",
@@ -161,6 +168,7 @@ async def set_last_price(sub_id: int, price: float) -> None:
 
 
 async def get_global_data() -> Optional[dict]:
+    """Return cached global market data if present."""
     async with aiosqlite.connect(config.DB_FILE) as db:
         cursor = await db.execute("SELECT data, fetched_at FROM global_info WHERE id=1")
         row = await cursor.fetchone()
@@ -171,6 +179,7 @@ async def get_global_data() -> Optional[dict]:
 
 
 async def set_global_data(data: dict) -> None:
+    """Persist global market data in the database."""
     async with aiosqlite.connect(config.DB_FILE) as db:
         await db.execute("DELETE FROM global_info WHERE id=1")
         await db.execute(
@@ -181,6 +190,7 @@ async def set_global_data(data: dict) -> None:
 
 
 async def get_coin_info(coin: str) -> Optional[dict]:
+    """Return cached CoinGecko info for ``coin`` if available."""
     async with aiosqlite.connect(config.DB_FILE) as db:
         cursor = await db.execute(
             "SELECT data, fetched_at FROM coin_info WHERE coin_id=?",
@@ -194,6 +204,7 @@ async def get_coin_info(coin: str) -> Optional[dict]:
 
 
 async def set_coin_info(coin: str, data: dict) -> None:
+    """Store detailed coin information in the database."""
     async with aiosqlite.connect(config.DB_FILE) as db:
         await db.execute(
             "REPLACE INTO coin_info (coin_id, data, fetched_at) VALUES (?, ?, ?)",
@@ -203,6 +214,7 @@ async def set_coin_info(coin: str, data: dict) -> None:
 
 
 async def get_coin_chart(coin: str, days: int) -> Optional[list]:
+    """Return cached chart data for ``coin`` if available."""
     async with aiosqlite.connect(config.DB_FILE) as db:
         cursor = await db.execute(
             "SELECT data, fetched_at FROM coin_charts WHERE coin_id=? AND days=?",
@@ -216,6 +228,7 @@ async def get_coin_chart(coin: str, days: int) -> Optional[list]:
 
 
 async def set_coin_chart(coin: str, days: int, data: list) -> None:
+    """Store chart data for ``coin`` for ``days`` days."""
     async with aiosqlite.connect(config.DB_FILE) as db:
         await db.execute(
             (
@@ -228,6 +241,7 @@ async def set_coin_chart(coin: str, days: int, data: list) -> None:
 
 
 async def get_trending_coins() -> Optional[list[dict]]:
+    """Return cached trending coin information if available."""
     async with aiosqlite.connect(config.DB_FILE) as db:
         cursor = await db.execute(
             "SELECT data, fetched_at FROM trending_coins WHERE id=1"
@@ -240,6 +254,7 @@ async def get_trending_coins() -> Optional[list[dict]]:
 
 
 async def set_trending_coins(coins: list[dict]) -> None:
+    """Cache the list of trending coins."""
     async with aiosqlite.connect(config.DB_FILE) as db:
         await db.execute("DELETE FROM trending_coins WHERE id=1")
         await db.execute(
@@ -250,6 +265,7 @@ async def set_trending_coins(coins: list[dict]) -> None:
 
 
 async def get_coin_data(coin: str) -> Optional[dict]:
+    """Return aggregated cached data for ``coin`` if present."""
     async with aiosqlite.connect(config.DB_FILE) as db:
         cursor = await db.execute(
             (
@@ -272,6 +288,7 @@ async def get_coin_data(coin: str) -> Optional[dict]:
 
 
 async def set_coin_data(coin: str, data: dict) -> None:
+    """Store aggregated coin data in the database."""
     async with aiosqlite.connect(config.DB_FILE) as db:
         await db.execute(
             (

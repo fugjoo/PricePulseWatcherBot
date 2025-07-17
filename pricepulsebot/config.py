@@ -1,3 +1,9 @@
+"""Configuration and helper utilities for PricePulseWatcherBot.
+
+This module loads environment variables, configures logging and exposes
+constants used across the bot.
+"""
+
 import logging
 import os
 import re
