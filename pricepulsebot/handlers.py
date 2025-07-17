@@ -900,10 +900,11 @@ async def settings_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE) -> No
         await update.message.reply_text(text)
         return
     if len(context.args) < 2:
-        await update.message.reply_text(
-            f"{ERROR_EMOJI} Usage: /settings <threshold|interval|milestones|currency>"
-            " <value>"
+        usage = (
+            f"{ERROR_EMOJI} Usage: "
+            "/settings <threshold|interval|milestones|currency> <value>"
         )
+        await update.message.reply_text(usage)
         return
     key = context.args[0].lower()
     value = context.args[1]
