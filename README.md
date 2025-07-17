@@ -57,6 +57,7 @@ Create a `.env` file from the example. It holds credentials and runtime options:
 - `/list` – list active subscriptions
 - `/info <coin>` – show current coin data
 - `/chart <coin> [days]` – plot price history (alias `/charts`)
+- `/news [coin]` – show latest news (uses subscriptions when omitted)
 - `/trends` – show trending coins
 - `/global` – show global market stats
 - `/status` – display API status overview
