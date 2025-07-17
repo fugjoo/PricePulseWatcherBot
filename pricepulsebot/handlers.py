@@ -41,6 +41,33 @@ SUCCESS_EMOJI = "\u2705"
 ERROR_EMOJI = "\u26a0\ufe0f"
 
 
+def format_coin_text(
+    name: str,
+    symbol: str,
+    price: Optional[float],
+    change_24h: Optional[float],
+    cap: Optional[float],
+    *,
+    threshold: Optional[float] = None,
+    interval: Optional[int] = None,
+) -> str:
+    """Return formatted text describing a coin."""
+    text = f"{INFO_EMOJI} {name}"
+    if symbol:
+        text += f" ({symbol})"
+    text += "\n"
+    if threshold is not None and interval is not None:
+        text += f"Alerts: ±{threshold}% every {config.format_interval(interval)}\n"
+    if price is not None:
+        text += f"Price: ${format_price(price)}"
+        if change_24h is not None:
+            text += f" ({change_24h:+.2f}% 24h)"
+        text += "\n"
+    if cap is not None:
+        text += f"Cap: ${cap:,.0f}"
+    return text
+
+
 def milestone_step(price: float) -> float:
     if price >= 1000:
         return 100.0
@@ -382,18 +409,15 @@ async def build_sub_entries(chat_id: int) -> List[Tuple[str, str]]:
         if sym:
             config.COIN_SYMBOLS[coin] = sym.upper()
             config.SYMBOL_TO_COIN[sym.lower()] = coin
-        line = f"{INFO_EMOJI} {info.get('name', coin.title())}"
-        if sym:
-            line += f" ({sym.upper()})"
-        line += "\n"
-        line += f"Alerts: ±{threshold}% every {config.format_interval(interval)}\n"
-        if price is not None:
-            line += f"Price: ${format_price(price)}"
-            if change_24h is not None:
-                line += f" ({change_24h:+.2f}% 24h)"
-            line += "\n"
-        if cap is not None:
-            line += f"Cap: ${cap:,.0f}"
+        line = format_coin_text(
+            info.get("name", coin.title()),
+            sym.upper() if sym else "",
+            price,
+            change_24h,
+            cap,
+            threshold=threshold,
+            interval=interval,
+        )
         entries.append((coin, line))
     return entries
 
@@ -450,13 +474,13 @@ async def info_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     sym = data.get("symbol", "").upper()
     config.COIN_SYMBOLS[coin] = sym
     config.SYMBOL_TO_COIN[sym.lower()] = coin
-    text = f"{INFO_EMOJI} {data.get('name')} ({sym})\n"
-    if price is not None:
-        text += f"Price: ${format_price(price)}\n"
-    if cap is not None:
-        text += f"Market Cap: ${cap:,.0f}\n"
-    if change is not None:
-        text += f"24h Change: {change:.2f}%"
+    text = format_coin_text(
+        data.get("name"),
+        sym,
+        price,
+        change,
+        cap,
+    )
     await update.message.reply_text(text)
 
 
