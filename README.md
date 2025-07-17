@@ -10,6 +10,7 @@ percentage. Create a `.env` from the example and keep your
 - Suggest random coins from the top market cap list in the keyboard
 - Autocompletion for all bot commands
 - Monitor API health with `/status`
+- Check recent coin news with links via `/news` (CryptoCompare)
 
 ## Quickstart
 
@@ -57,6 +58,7 @@ Create a `.env` file from the example. It holds credentials and runtime options:
 - `/list` – list active subscriptions
 - `/info <coin>` – show current coin data
 - `/chart <coin> [days]` – plot price history (alias `/charts`)
+- `/news [coin]` – show latest news with links (uses subscriptions when omitted)
 - `/trends` – show trending coins
 - `/global` – show global market stats
 - `/status` – display API status overview
