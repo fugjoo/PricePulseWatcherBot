@@ -6,9 +6,10 @@ percentage. Create a `.env` from the example and keep your
 
 ## Features
 
- - Subscribe to trending coins and get alerts
- - Suggest random coins from the top market cap list in the keyboard
+- Subscribe to trending coins and get alerts
+- Suggest random coins from the top market cap list in the keyboard
 - Autocompletion for all bot commands
+- Monitor API health with `/status`
 
 ## Quickstart
 
@@ -58,6 +59,7 @@ Create a `.env` file from the example. It holds credentials and runtime options:
 - `/chart <coin> [days]` – plot price history (alias `/charts`)
 - `/trends` – show trending coins
 - `/global` – show global market stats
+- `/status` – display API status overview
 - `/milestones [on|off]` – toggle milestone notifications (no args switch)
 - `/settings [key value]` – show or change default settings
 
