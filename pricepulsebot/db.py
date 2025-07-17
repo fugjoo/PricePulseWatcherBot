@@ -155,6 +155,14 @@ async def unsubscribe_coin(chat_id: int, coin: str) -> None:
     config.logger.info("chat %s unsubscribed from %s", chat_id, coin)
 
 
+async def unsubscribe_all(chat_id: int) -> None:
+    """Remove all subscriptions for ``chat_id``."""
+    async with aiosqlite.connect(config.DB_FILE) as db:
+        await db.execute("DELETE FROM subscriptions WHERE chat_id=?", (chat_id,))
+        await db.commit()
+    config.logger.info("chat %s cleared all subscriptions", chat_id)
+
+
 async def list_subscriptions(
     chat_id: int,
 ) -> List[Tuple[int, str, float, int, Optional[float], Optional[float]]]:

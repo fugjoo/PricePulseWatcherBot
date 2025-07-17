@@ -499,6 +499,15 @@ async def unsubscribe_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
     )
 
 
+async def clear_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    """Remove all subscriptions for the chat."""
+    await db.unsubscribe_all(update.effective_chat.id)
+    await update.message.reply_text(
+        f"{SUCCESS_EMOJI} Removed all subscriptions",
+        reply_markup=get_keyboard(),
+    )
+
+
 async def build_sub_entries(chat_id: int) -> List[Tuple[str, str]]:
     """Return formatted subscription entries for ``chat_id``."""
     subs = await db.list_subscriptions(chat_id)
