@@ -66,24 +66,7 @@ async def main() -> None:
 
     await app.initialize()
     await app.bot.set_my_commands(
-        [
-            BotCommand("start", "Show menu"),
-            BotCommand("help", "Show help"),
-            BotCommand("add", "Subscribe to price alerts"),
-            BotCommand("remove", "Remove subscription"),
-            BotCommand("clear", "Remove all subscriptions"),
-            BotCommand("list", "List subscriptions"),
-            BotCommand("info", "Coin information"),
-            BotCommand("chart", "Price chart"),
-            BotCommand("news", "Latest news"),
-            BotCommand("trends", "Trending coins"),
-            BotCommand("global", "Global market"),
-            BotCommand("feargreed", "Market sentiment"),
-            BotCommand("status", "API status"),
-            BotCommand("valuearea", "Volume profile"),
-            BotCommand("milestones", "Toggle milestone alerts"),
-            BotCommand("settings", "Show or change defaults"),
-        ]
+        [BotCommand(name, desc) for name, desc in handlers.COMMANDS]
     )
     await app.start()
     await app.updater.start_polling()

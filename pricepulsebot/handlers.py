@@ -44,6 +44,26 @@ INFO_EMOJI = "\u2139\ufe0f"
 SUCCESS_EMOJI = "\u2705"
 ERROR_EMOJI = "\u26a0\ufe0f"
 
+# (name, description) pairs used for help text and bot registration
+COMMANDS: list[tuple[str, str]] = [
+    ("add", "Subscribe to price alerts"),
+    ("chart", "Price chart"),
+    ("clear", "Remove all subscriptions"),
+    ("feargreed", "Market sentiment"),
+    ("global", "Global market"),
+    ("help", "Show help"),
+    ("info", "Coin information"),
+    ("list", "List subscriptions"),
+    ("milestones", "Toggle milestone alerts"),
+    ("news", "Latest news"),
+    ("remove", "Remove subscription"),
+    ("settings", "Show or change defaults"),
+    ("start", "Show menu"),
+    ("status", "API status"),
+    ("trends", "Trending coins"),
+    ("valuearea", "Volume profile"),
+]
+
 
 def format_coin_text(
     name: str,
@@ -435,20 +455,10 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
 
 async def help_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     """Display available commands and usage information."""
+    lines = [f"/{name} - {desc}" for name, desc in COMMANDS]
+    lines.append("Intervals can be like 1h, 15m or 30s")
     await update.message.reply_text(
-        f"{INFO_EMOJI} /add <coin> [pct] [interval] - subscribe to price alerts\n"
-        "/remove <coin> - remove subscription\n"
-        "/list - list subscriptions\n"
-        "/info <coin> - coin information\n"
-        "/chart(s) <coin> [days] - price chart\n"
-        "/news [coin] - latest news\n"
-        "/trends - show trending coins\n"
-        "/global - global market stats\n"
-        "/feargreed - market sentiment\n"
-        "/status - API status overview\n"
-        "/valuearea <symbol> <interval> <count> - volume profile\n"
-        "Intervals can be like 1h, 15m or 30s",
-        reply_markup=get_keyboard(),
+        f"{INFO_EMOJI} " + "\n".join(lines), reply_markup=get_keyboard()
     )
 
 
