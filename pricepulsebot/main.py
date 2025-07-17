@@ -33,6 +33,7 @@ async def main() -> None:
     app.add_handler(CommandHandler("help", handlers.help_cmd))
     app.add_handler(CommandHandler("add", handlers.subscribe_cmd))
     app.add_handler(CommandHandler("remove", handlers.unsubscribe_cmd))
+    app.add_handler(CommandHandler("clear", handlers.clear_cmd))
     app.add_handler(CommandHandler("list", handlers.list_cmd))
     app.add_handler(CommandHandler("info", handlers.info_cmd))
     app.add_handler(CommandHandler("chart", handlers.chart_cmd))
@@ -64,6 +65,7 @@ async def main() -> None:
             BotCommand("help", "Show help"),
             BotCommand("add", "Subscribe to price alerts"),
             BotCommand("remove", "Remove subscription"),
+            BotCommand("clear", "Remove all subscriptions"),
             BotCommand("list", "List subscriptions"),
             BotCommand("info", "Coin information"),
             BotCommand("chart", "Price chart"),

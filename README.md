@@ -54,6 +54,7 @@ Create a `.env` file from the example. It holds credentials and runtime options:
 
 - `/add <coin> [pct] [interval]` – subscribe to price alerts
 - `/remove <coin>` – remove a subscription
+- `/clear` – remove all subscriptions
 - `/list` – list active subscriptions
 - `/info <coin>` – show current coin data
 - `/chart <coin> [days]` – plot price history (alias `/charts`)
