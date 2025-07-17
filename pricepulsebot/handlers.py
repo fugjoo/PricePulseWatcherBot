@@ -358,6 +358,7 @@ async def help_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
         "/chart(s) <coin> [days] - price chart\n"
         "/trends - show trending coins\n"
         "/global - global market stats\n"
+        "/status - API status overview\n"
         "/valuearea <symbol> <interval> <count> - volume profile\n"
         "Intervals can be like 1h, 15m or 30s",
         reply_markup=get_keyboard(),
@@ -756,6 +757,29 @@ async def settings_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE) -> No
         )
     else:
         await update.message.reply_text(f"{ERROR_EMOJI} Unknown setting '{key}'")
+
+
+async def status_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    """Show API request status counts and a status code chart."""
+    counts = api.status_counts()
+    if not counts:
+        await update.message.reply_text(f"{INFO_EMOJI} No API requests recorded")
+        return
+    codes = sorted(counts)
+    plt.figure(figsize=(4, 3))
+    plt.bar([str(c) for c in codes], [counts[c] for c in codes])
+    plt.xlabel("HTTP status")
+    plt.ylabel("Count")
+    plt.title("API responses")
+    plt.tight_layout()
+    buf = BytesIO()
+    plt.savefig(buf, format="png")
+    plt.close()
+    buf.seek(0)
+    await context.bot.send_photo(update.effective_chat.id, buf)
+    lines = [f"{code}: {counts[code]}" for code in codes]
+    text = f"{INFO_EMOJI} API responses:\n" + "\n".join(lines)
+    await update.message.reply_text(text)
 
 
 async def button(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:

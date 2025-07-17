@@ -38,6 +38,7 @@ async def main() -> None:
     app.add_handler(CommandHandler("chart", handlers.chart_cmd))
     app.add_handler(CommandHandler("trends", handlers.trends_cmd))
     app.add_handler(CommandHandler("global", handlers.global_cmd))
+    app.add_handler(CommandHandler("status", handlers.status_cmd))
     app.add_handler(CommandHandler("valuearea", handlers.valuearea_cmd))
     app.add_handler(CommandHandler("milestones", handlers.milestones_cmd))
     app.add_handler(CommandHandler("settings", handlers.settings_cmd))
@@ -68,6 +69,7 @@ async def main() -> None:
             BotCommand("chart", "Price chart"),
             BotCommand("trends", "Trending coins"),
             BotCommand("global", "Global market"),
+            BotCommand("status", "API status"),
             BotCommand("valuearea", "Volume profile"),
             BotCommand("milestones", "Toggle milestone alerts"),
             BotCommand("settings", "Show or change defaults"),
