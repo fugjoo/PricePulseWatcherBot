@@ -1,6 +1,7 @@
 import logging
 import os
 import re
+from logging.handlers import WatchedFileHandler
 
 from dotenv import load_dotenv
 
@@ -57,7 +58,7 @@ TOP_COINS: list[str] = []
 LOG_FILE = os.getenv("LOG_FILE")
 _handlers = [logging.StreamHandler()]
 if LOG_FILE:
-    _handlers.append(logging.FileHandler(LOG_FILE))
+    _handlers.append(WatchedFileHandler(LOG_FILE))
 
 logging.basicConfig(
     level=os.getenv("LOG_LEVEL", "INFO").upper(),
