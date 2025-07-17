@@ -58,6 +58,8 @@ Create a `.env` file from the example. It holds credentials and runtime options:
 - `/chart <coin> [days]` – plot price history (alias `/charts`)
 - `/trends` – show trending coins
 - `/global` – show global market stats
+- `/milestones [on|off]` – toggle milestone notifications
+- `/settings [key value]` – show or change default settings
 
 Intervals accept plain seconds or values like `1h`, `15m` or `30s`.
 

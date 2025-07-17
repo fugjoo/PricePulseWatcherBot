@@ -653,6 +653,79 @@ async def valuearea_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE) -> N
     await update.message.reply_text(text)
 
 
+async def milestones_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    state = "on" if config.ENABLE_MILESTONE_ALERTS else "off"
+    if not context.args:
+        await update.message.reply_text(
+            f"{INFO_EMOJI} Milestone alerts are currently {state}"
+        )
+        return
+    arg = context.args[0].lower()
+    if arg not in {"on", "off"}:
+        await update.message.reply_text(f"{ERROR_EMOJI} Usage: /milestones [on|off]")
+        return
+    config.ENABLE_MILESTONE_ALERTS = arg == "on"
+    state = "enabled" if config.ENABLE_MILESTONE_ALERTS else "disabled"
+    await update.message.reply_text(f"{SUCCESS_EMOJI} Milestone alerts {state}")
+
+
+async def settings_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    if not context.args:
+        text = (
+            f"{INFO_EMOJI} Current settings:\n"
+            f"- threshold: ±{config.DEFAULT_THRESHOLD}%\n"
+            f"- interval: {config.format_interval(config.DEFAULT_INTERVAL)}\n"
+            f"- pricecheck: {config.format_interval(config.PRICE_CHECK_INTERVAL)}\n"
+            f"- milestones: {'on' if config.ENABLE_MILESTONE_ALERTS else 'off'}"
+        )
+        await update.message.reply_text(text)
+        return
+    if len(context.args) < 2:
+        await update.message.reply_text(
+            f"{ERROR_EMOJI} Usage: /settings <threshold|interval|milestones> <value>"
+        )
+        return
+    key = context.args[0].lower()
+    value = context.args[1]
+    if key == "threshold":
+        try:
+            config.DEFAULT_THRESHOLD = float(value)
+        except ValueError:
+            await update.message.reply_text(f"{ERROR_EMOJI} Threshold must be a number")
+            return
+        await update.message.reply_text(
+            f"{SUCCESS_EMOJI} Default threshold set to {config.DEFAULT_THRESHOLD}%"
+        )
+    elif key == "interval":
+        try:
+            config.DEFAULT_INTERVAL = config.parse_duration(value)
+        except ValueError:
+            await update.message.reply_text(
+                f"{ERROR_EMOJI} Interval must be a number or like 1h, 15m, 30s"
+            )
+            return
+        interval_text = config.format_interval(config.DEFAULT_INTERVAL)
+        await update.message.reply_text(
+            f"{SUCCESS_EMOJI} Default interval set to {interval_text}"
+        )
+    elif key == "milestones":
+        val = value.lower()
+        if val not in {"on", "off"}:
+            await update.message.reply_text(
+                f"{ERROR_EMOJI} Milestones must be on or off"
+            )
+            return
+        config.ENABLE_MILESTONE_ALERTS = val == "on"
+        state = "enabled" if config.ENABLE_MILESTONE_ALERTS else "disabled"
+        await update.message.reply_text(f"{SUCCESS_EMOJI} Milestone alerts {state}")
+    elif key == "pricecheck":
+        await update.message.reply_text(
+            f"{ERROR_EMOJI} PRICE_CHECK_INTERVAL cannot be changed"
+        )
+    else:
+        await update.message.reply_text(f"{ERROR_EMOJI} Unknown setting '{key}'")
+
+
 async def button(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     query = update.callback_query
     await query.answer()
