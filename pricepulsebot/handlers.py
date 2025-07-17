@@ -138,37 +138,6 @@ def usd_value(value: Optional[object]) -> Optional[float]:
     return None
 
 
-async def create_chart_image(
-    coin: str, days: int, user_id: int
-) -> tuple[Optional[BytesIO], Optional[str]]:
-    """Return a PNG chart image for ``coin`` covering ``days``."""
-    cached = await db.get_coin_data(coin)
-    if days == 7 and cached and cached.get("chart_7d") is not None:
-        data = [(p[0], p[1]) for p in cached["chart_7d"]]
-        err = None
-    else:
-        data, err = await api.get_market_chart(coin, days, user=user_id)
-    if err:
-        return None, err
-    if not data:
-        return None, "No data available"
-    times, prices = zip(*data)
-    times = [datetime.fromtimestamp(t) for t in times]
-    plt.figure(figsize=(6, 3))
-    plt.plot(times, prices)
-    ax = plt.gca()
-    ax.xaxis.set_major_locator(mdates.AutoDateLocator())
-    ax.xaxis.set_major_formatter(mdates.DateFormatter("%b %d"))
-    plt.xlabel("Date")
-    plt.title(f"{coin.upper()} last {days} days")
-    plt.tight_layout()
-    buf = BytesIO()
-    plt.savefig(buf, format="png")
-    plt.close()
-    buf.seek(0)
-    return buf, None
-
-
 def calculate_volume_profile(candles: List[dict]) -> dict:
     """Calculate the volume profile statistics for given candles."""
     if not candles:
@@ -502,7 +471,6 @@ async def list_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     await context.bot.send_chat_action(
         chat_id=update.effective_chat.id, action=ChatAction.TYPING
     )
-    show_chart = len(context.args) > 0 and context.args[0].lower() == "full"
     entries = await build_sub_entries(update.effective_chat.id)
     if not entries:
         await update.message.reply_text(f"{INFO_EMOJI} No active subscriptions")
@@ -512,21 +480,14 @@ async def list_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
             [[InlineKeyboardButton("Remove", callback_data=f"del:{coin}")]]
         )
         await update.message.reply_text(text, reply_markup=keyboard)
-        if show_chart:
-            buf, err = await create_chart_image(coin, 7, update.effective_chat.id)
-            if err:
-                await update.message.reply_text(f"{ERROR_EMOJI} {err}")
-                continue
-            await context.bot.send_photo(update.effective_chat.id, buf)
 
 
 async def info_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     """Show detailed information about a coin."""
     if not context.args:
-        await update.message.reply_text(f"{ERROR_EMOJI} Usage: /info <coin> [full]")
+        await update.message.reply_text(f"{ERROR_EMOJI} Usage: /info <coin>")
         return
     coin_input = context.args[0]
-    show_chart = len(context.args) > 1 and context.args[1].lower() == "full"
     coin = await api.resolve_coin(coin_input, user=update.effective_chat.id)
     if not coin:
         suggestions = await api.suggest_coins(coin_input)
@@ -569,12 +530,6 @@ async def info_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
         cap,
     )
     await update.message.reply_text(text)
-    if show_chart:
-        buf, err = await create_chart_image(coin, 7, update.effective_chat.id)
-        if err:
-            await update.message.reply_text(f"{ERROR_EMOJI} {err}")
-        else:
-            await context.bot.send_photo(update.effective_chat.id, buf)
 
 
 async def chart_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
@@ -599,10 +554,34 @@ async def chart_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
         except ValueError:
             await update.message.reply_text(f"{ERROR_EMOJI} Days must be a number")
             return
-    buf, err = await create_chart_image(coin, days, update.effective_chat.id)
+    cached = await db.get_coin_data(coin)
+    if days == 7 and cached and cached.get("chart_7d") is not None:
+        data = [(p[0], p[1]) for p in cached["chart_7d"]]
+        err = None
+    else:
+        data, err = await api.get_market_chart(
+            coin, days, user=update.effective_chat.id
+        )
     if err:
         await update.message.reply_text(f"{ERROR_EMOJI} {err}")
         return
+    if not data:
+        await update.message.reply_text(f"{ERROR_EMOJI} No data available")
+        return
+    times, prices = zip(*data)
+    times = [datetime.fromtimestamp(t) for t in times]
+    plt.figure(figsize=(6, 3))
+    plt.plot(times, prices)
+    ax = plt.gca()
+    ax.xaxis.set_major_locator(mdates.AutoDateLocator())
+    ax.xaxis.set_major_formatter(mdates.DateFormatter("%b %d"))
+    plt.xlabel("Date")
+    plt.title(f"{coin.upper()} last {days} days")
+    plt.tight_layout()
+    buf = BytesIO()
+    plt.savefig(buf, format="png")
+    plt.close()
+    buf.seek(0)
     await context.bot.send_photo(update.effective_chat.id, buf)
 
 
