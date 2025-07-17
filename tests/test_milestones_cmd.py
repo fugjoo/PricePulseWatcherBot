@@ -24,9 +24,20 @@ class DummyContext:
 
 
 @pytest.mark.asyncio
-async def test_milestones_cmd_toggle():
+async def test_milestones_cmd_set_on():
     update = DummyUpdate()
     ctx = DummyContext(["on"])
+    prev = config.ENABLE_MILESTONE_ALERTS
+    config.ENABLE_MILESTONE_ALERTS = False
+    await handlers.milestones_cmd(update, ctx)
+    assert config.ENABLE_MILESTONE_ALERTS is True
+    config.ENABLE_MILESTONE_ALERTS = prev
+
+
+@pytest.mark.asyncio
+async def test_milestones_cmd_toggle():
+    update = DummyUpdate()
+    ctx = DummyContext([])
     prev = config.ENABLE_MILESTONE_ALERTS
     config.ENABLE_MILESTONE_ALERTS = False
     await handlers.milestones_cmd(update, ctx)

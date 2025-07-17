@@ -654,11 +654,10 @@ async def valuearea_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE) -> N
 
 
 async def milestones_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
-    state = "on" if config.ENABLE_MILESTONE_ALERTS else "off"
     if not context.args:
-        await update.message.reply_text(
-            f"{INFO_EMOJI} Milestone alerts are currently {state}"
-        )
+        config.ENABLE_MILESTONE_ALERTS = not config.ENABLE_MILESTONE_ALERTS
+        state = "enabled" if config.ENABLE_MILESTONE_ALERTS else "disabled"
+        await update.message.reply_text(f"{SUCCESS_EMOJI} Milestone alerts {state}")
         return
     arg = context.args[0].lower()
     if arg not in {"on", "off"}:
