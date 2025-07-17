@@ -36,6 +36,7 @@ async def main() -> None:
     app.add_handler(CommandHandler("list", handlers.list_cmd))
     app.add_handler(CommandHandler("info", handlers.info_cmd))
     app.add_handler(CommandHandler("chart", handlers.chart_cmd))
+    app.add_handler(CommandHandler("news", handlers.news_cmd))
     app.add_handler(CommandHandler("trends", handlers.trends_cmd))
     app.add_handler(CommandHandler("global", handlers.global_cmd))
     app.add_handler(CommandHandler("status", handlers.status_cmd))
@@ -67,6 +68,7 @@ async def main() -> None:
             BotCommand("list", "List subscriptions"),
             BotCommand("info", "Coin information"),
             BotCommand("chart", "Price chart"),
+            BotCommand("news", "Latest news"),
             BotCommand("trends", "Trending coins"),
             BotCommand("global", "Global market"),
             BotCommand("status", "API status"),
