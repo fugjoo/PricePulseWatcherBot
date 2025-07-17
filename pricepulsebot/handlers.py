@@ -302,7 +302,7 @@ async def help_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
 async def subscribe_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     if not context.args:
         await update.message.reply_text(
-            f"{ERROR_EMOJI} Usage: /add <coin> [pct] [interval]", quote=True
+            f"{ERROR_EMOJI} Usage: /add <coin> [pct] [interval]"
         )
         return
     coin_input = context.args[0]
@@ -360,6 +360,8 @@ async def build_sub_entries(chat_id: int) -> List[Tuple[str, str]]:
         cached = await db.get_coin_data(coin, max_age=config.CACHE_TTL)
         info = cached.get("info") if cached else None
         market = cached.get("market_info") if cached else None
+        if market is not None and not isinstance(market, dict):
+            market = None
         price = cached.get("price") if cached else None
         if info is None:
             info, _ = await api.get_coin_info(coin, user=chat_id)
@@ -426,6 +428,8 @@ async def info_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     cached = await db.get_coin_data(coin, max_age=config.CACHE_TTL)
     data = cached.get("info") if cached else None
     market = cached.get("market_info") if cached else None
+    if market is not None and not isinstance(market, dict):
+        market = None
     if data is None:
         data, err = await api.get_coin_info(coin, user=update.effective_chat.id)
         if err:
