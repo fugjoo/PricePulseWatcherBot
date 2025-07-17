@@ -9,14 +9,8 @@ from typing import Deque, Dict, List, Optional, Tuple
 import aiohttp
 import numpy as np
 from matplotlib import pyplot as plt
-from telegram import (
-    Bot,
-    InlineKeyboardButton,
-    InlineKeyboardMarkup,
-    KeyboardButton,
-    ReplyKeyboardMarkup,
-    Update,
-)
+from telegram import (Bot, InlineKeyboardButton, InlineKeyboardMarkup,
+                      KeyboardButton, ReplyKeyboardMarkup, Update)
 from telegram.constants import ChatAction
 from telegram.ext import ContextTypes
 
@@ -178,16 +172,25 @@ async def check_prices(app) -> None:
             )
         coins = list(by_coin.keys())
         prices: Dict[str, float] = {}
-        if len(coins) > 1:
-            groups = [
-                coins[i : i + 250] for i in range(0, len(coins), 250)  # noqa: E203
-            ]
-            for group in groups:
-                prices.update(
-                    await api.get_prices(group, session=http_session, user=None)
-                )
-        else:
-            for coin in coins:
+        missing: List[str] = []
+        for coin in coins:
+            cached = await db.get_coin_data(coin, max_age=config.CACHE_TTL)
+            if cached and cached.get("price") is not None:
+                prices[coin] = float(cached["price"])
+            else:
+                missing.append(coin)
+        if missing:
+            if len(missing) > 1:
+                groups = [
+                    missing[i : i + 250]  # noqa: E203
+                    for i in range(0, len(missing), 250)
+                ]
+                for group in groups:
+                    prices.update(
+                        await api.get_prices(group, session=http_session, user=None)
+                    )
+            else:
+                coin = missing[0]
                 price = await api.get_price(coin, user=None)
                 if price is not None:
                     prices[coin] = price
@@ -230,7 +233,10 @@ async def check_prices(app) -> None:
                             f"{symbol} moved {raw_change:+.2f}% in "
                             f"{config.format_interval(interval)} (now ${price}"
                         )
-                        info = await api.get_market_info(coin, user=chat_id)
+                        cached = await db.get_coin_data(coin, max_age=config.CACHE_TTL)
+                        info = cached.get("market_info") if cached else None
+                        if info is None:
+                            info = await api.get_market_info(coin, user=chat_id)
                         change_24h = None
                         if info:
                             change_24h = info.get("price_change_percentage_24h")
@@ -249,8 +255,7 @@ async def refresh_cache(app) -> None:
         coins = [row[0] for row in await cursor.fetchall()]
         await cursor.close()
     for coin in coins:
-        await api.get_coin_info(coin, user=None)
-        await api.get_market_chart(coin, 7, user=None)
+        await api.refresh_coin_data(coin)
     await api.get_global_overview(user=None)
 
 
@@ -346,14 +351,21 @@ async def build_sub_entries(chat_id: int) -> List[Tuple[str, str]]:
     subs = await db.list_subscriptions(chat_id)
     entries: List[Tuple[str, str]] = []
     for _, coin, threshold, interval, *_ in subs:
-        info, _ = await api.get_coin_info(coin, user=chat_id)
+        cached = await db.get_coin_data(coin, max_age=config.CACHE_TTL)
+        info = cached.get("info") if cached else None
+        market = cached.get("market_info") if cached else None
+        price = cached.get("price") if cached else None
+        if info is None:
+            info, _ = await api.get_coin_info(coin, user=chat_id)
         info = info or {}
-        market = info.get("market_data", {})
-        price = (
-            market.get("current_price", {}).get("usd")
-            or await api.get_price(coin, user=chat_id)
-            or 0
-        )
+        if market is None:
+            market = info.get("market_data", {})
+        if price is None:
+            price = (
+                market.get("current_price", {}).get("usd")
+                or await api.get_price(coin, user=chat_id)
+                or 0
+            )
         cap = market.get("market_cap", {}).get("usd")
         change_24h = market.get("price_change_percentage_24h")
         sym = info.get("symbol")
@@ -404,14 +416,19 @@ async def info_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
             msg += f". Did you mean {syms}?"
         await update.message.reply_text(msg)
         return
-    data, err = await api.get_coin_info(coin, user=update.effective_chat.id)
-    if err:
-        await update.message.reply_text(f"{ERROR_EMOJI} {err}")
-        return
-    if not data:
+    cached = await db.get_coin_data(coin, max_age=config.CACHE_TTL)
+    data = cached.get("info") if cached else None
+    market = cached.get("market_info") if cached else None
+    if data is None:
+        data, err = await api.get_coin_info(coin, user=update.effective_chat.id)
+        if err:
+            await update.message.reply_text(f"{ERROR_EMOJI} {err}")
+            return
+    if data is None:
         await update.message.reply_text(f"{ERROR_EMOJI} No data available")
         return
-    market = data.get("market_data", {})
+    if market is None:
+        market = data.get("market_data", {})
     price = market.get("current_price", {}).get("usd")
     cap = market.get("market_cap", {}).get("usd")
     change = market.get("price_change_percentage_24h")
@@ -449,7 +466,14 @@ async def chart_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
         except ValueError:
             await update.message.reply_text(f"{ERROR_EMOJI} Days must be a number")
             return
-    data, err = await api.get_market_chart(coin, days, user=update.effective_chat.id)
+    cached = await db.get_coin_data(coin, max_age=config.CACHE_TTL)
+    if days == 7 and cached and cached.get("chart_7d") is not None:
+        data = [(p[0], p[1]) for p in cached["chart_7d"]]
+        err = None
+    else:
+        data, err = await api.get_market_chart(
+            coin, days, user=update.effective_chat.id
+        )
     if err:
         await update.message.reply_text(f"{ERROR_EMOJI} {err}")
         return

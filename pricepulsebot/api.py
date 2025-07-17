@@ -494,3 +494,20 @@ async def fetch_top_coins() -> None:
             config.TOP_COINS = coins
     except aiohttp.ClientError as exc:
         config.logger.error("error fetching top coins: %s", exc)
+
+
+async def refresh_coin_data(coin: str) -> None:
+    async with aiohttp.ClientSession() as session:
+        price = await get_price(coin, session=session, user=None)
+        market_info = await get_market_info(coin, session=session, user=None)
+        info, _ = await get_coin_info(coin, session=session, user=None)
+        chart, _ = await get_market_chart(coin, 7, session=session, user=None)
+    await db.set_coin_data(
+        coin,
+        {
+            "price": price,
+            "market_info": market_info,
+            "info": info,
+            "chart_7d": chart,
+        },
+    )

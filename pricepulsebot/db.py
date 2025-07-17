@@ -60,6 +60,18 @@ async def init_db() -> None:
             )
             """
         )
+        await db.execute(
+            """
+            CREATE TABLE IF NOT EXISTS coin_data (
+                coin_id TEXT PRIMARY KEY,
+                price REAL,
+                market_info TEXT,
+                info TEXT,
+                chart_7d TEXT,
+                fetched_at REAL
+            )
+            """
+        )
         cursor = await db.execute("PRAGMA table_info(subscriptions)")
         rows = await cursor.fetchall()
         await cursor.close()
@@ -233,5 +245,46 @@ async def set_trending_coins(coins: list[dict]) -> None:
         await db.execute(
             "INSERT INTO trending_coins (id, data, fetched_at) VALUES (1, ?, ?)",
             (json.dumps(coins), time.time()),
+        )
+        await db.commit()
+
+
+async def get_coin_data(coin: str, max_age: int = 300) -> Optional[dict]:
+    async with aiosqlite.connect(config.DB_FILE) as db:
+        cursor = await db.execute(
+            (
+                "SELECT price, market_info, info, chart_7d, fetched_at "
+                "FROM coin_data WHERE coin_id=?"
+            ),
+            (coin,),
+        )
+        row = await cursor.fetchone()
+        await cursor.close()
+    if row and time.time() - row[4] < max_age:
+        price, market_json, info_json, chart_json, _ = row
+        return {
+            "price": price,
+            "market_info": json.loads(market_json) if market_json else None,
+            "info": json.loads(info_json) if info_json else None,
+            "chart_7d": json.loads(chart_json) if chart_json else None,
+        }
+    return None
+
+
+async def set_coin_data(coin: str, data: dict) -> None:
+    async with aiosqlite.connect(config.DB_FILE) as db:
+        await db.execute(
+            (
+                "REPLACE INTO coin_data (coin_id, price, market_info, info, "
+                "chart_7d, fetched_at) VALUES (?, ?, ?, ?, ?, ?)"
+            ),
+            (
+                coin,
+                data.get("price"),
+                json.dumps(data.get("market_info")),
+                json.dumps(data.get("info")),
+                json.dumps(data.get("chart_7d")),
+                time.time(),
+            ),
         )
         await db.commit()
