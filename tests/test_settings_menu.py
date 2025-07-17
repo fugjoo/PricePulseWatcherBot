@@ -54,3 +54,24 @@ async def test_settings_menu_toggle_and_back():
     assert kb.keyboard[1][1].text == SETTINGS_EMOJI
 
     config.DEFAULT_THRESHOLD = prev
+
+
+@pytest.mark.asyncio
+async def test_settings_menu_volume_toggle():
+    prev = config.ENABLE_VOLUME_ALERTS
+    update = DummyUpdate(SETTINGS_EMOJI)
+    ctx = DummyContext()
+    await handlers.menu(update, ctx)
+    assert any(
+        "volume" in btn.text
+        for row in update.message.markups[-1].keyboard
+        for btn in row
+    )
+
+    update.message.text = (
+        f"volume: {'on' if not config.ENABLE_VOLUME_ALERTS else 'off'}"
+    )
+    await handlers.menu(update, ctx)
+    assert config.ENABLE_VOLUME_ALERTS != prev
+    assert isinstance(update.message.markups[-1], ReplyKeyboardMarkup)
+    config.ENABLE_VOLUME_ALERTS = prev

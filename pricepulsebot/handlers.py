@@ -508,6 +508,7 @@ def get_settings_menu() -> ReplyKeyboardMarkup:
                 f"milestones: {'on' if config.ENABLE_MILESTONE_ALERTS else 'off'}"
             )
         ],
+        [KeyboardButton(f"volume: {'on' if config.ENABLE_VOLUME_ALERTS else 'off'}")],
         [
             KeyboardButton(
                 f"liquidations: {'on' if config.ENABLE_LIQUIDATION_ALERTS else 'off'}"
@@ -958,7 +959,7 @@ async def settings_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE) -> No
     """View or modify default alert settings."""
     if not context.args:
         text = f"{INFO_EMOJI} Current settings:"
-        await update.message.reply_text(text, reply_markup=get_settings_keyboard())
+        await update.message.reply_text(text, reply_markup=get_settings_menu())
         return
     if len(context.args) < 2:
         usage = (
@@ -1206,6 +1207,13 @@ async def menu(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
         state = "enabled" if config.ENABLE_MILESTONE_ALERTS else "disabled"
         await update.message.reply_text(
             f"{SUCCESS_EMOJI} Milestone alerts {state}",
+            reply_markup=get_settings_menu(),
+        )
+    elif text.startswith("volume"):
+        config.ENABLE_VOLUME_ALERTS = not config.ENABLE_VOLUME_ALERTS
+        state = "enabled" if config.ENABLE_VOLUME_ALERTS else "disabled"
+        await update.message.reply_text(
+            f"{SUCCESS_EMOJI} Volume alerts {state}",
             reply_markup=get_settings_menu(),
         )
     elif text.startswith("liquidations"):
