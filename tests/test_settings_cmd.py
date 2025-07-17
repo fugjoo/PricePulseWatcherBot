@@ -61,3 +61,13 @@ async def test_settings_pricecheck_readonly():
     await handlers.settings_cmd(update, ctx)
     assert config.PRICE_CHECK_INTERVAL == prev
     assert update.message.texts
+
+
+@pytest.mark.asyncio
+async def test_settings_update_currency():
+    update = DummyUpdate()
+    ctx = DummyContext(["currency", "eur"])
+    prev = config.VS_CURRENCY
+    await handlers.settings_cmd(update, ctx)
+    assert config.VS_CURRENCY == "eur"
+    config.VS_CURRENCY = prev

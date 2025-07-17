@@ -130,9 +130,9 @@ def trend_emojis(change: float) -> str:
 
 
 def usd_value(value: Optional[object]) -> Optional[float]:
-    """Return the USD float when given either a number or a dict."""
+    """Return the configured currency float when given either a number or a dict."""
     if isinstance(value, dict):
-        return value.get("usd")
+        return value.get(config.VS_CURRENCY)
     if isinstance(value, (int, float)):
         return float(value)
     return None
@@ -673,8 +673,8 @@ async def global_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None
         await update.message.reply_text(f"{ERROR_EMOJI} Failed to fetch data")
         return
     info = data.get("data", {})
-    cap = info.get("total_market_cap", {}).get("usd")
-    volume = info.get("total_volume", {}).get("usd")
+    cap = info.get("total_market_cap", {}).get(config.VS_CURRENCY)
+    volume = info.get("total_volume", {}).get(config.VS_CURRENCY)
     btc_dom = info.get("market_cap_percentage", {}).get("btc")
     cap_change = info.get("market_cap_change_percentage_24h_usd")
     active = info.get("active_cryptocurrencies")
@@ -823,13 +823,14 @@ async def settings_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE) -> No
             f"- threshold: ±{config.DEFAULT_THRESHOLD}%\n"
             f"- interval: {config.format_interval(config.DEFAULT_INTERVAL)}\n"
             f"- pricecheck: {config.format_interval(config.PRICE_CHECK_INTERVAL)}\n"
-            f"- milestones: {'on' if config.ENABLE_MILESTONE_ALERTS else 'off'}"
+            f"- milestones: {'on' if config.ENABLE_MILESTONE_ALERTS else 'off'}\n"
+            f"- currency: {config.VS_CURRENCY}"
         )
         await update.message.reply_text(text)
         return
     if len(context.args) < 2:
         await update.message.reply_text(
-            f"{ERROR_EMOJI} Usage: /settings <threshold|interval|milestones> <value>"
+            f"{ERROR_EMOJI} Usage: /settings <threshold|interval|milestones|currency> <value>"
         )
         return
     key = context.args[0].lower()
@@ -865,6 +866,11 @@ async def settings_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE) -> No
         config.ENABLE_MILESTONE_ALERTS = val == "on"
         state = "enabled" if config.ENABLE_MILESTONE_ALERTS else "disabled"
         await update.message.reply_text(f"{SUCCESS_EMOJI} Milestone alerts {state}")
+    elif key == "currency":
+        config.VS_CURRENCY = value.lower()
+        await update.message.reply_text(
+            f"{SUCCESS_EMOJI} Default currency set to {config.VS_CURRENCY}"
+        )
     elif key == "pricecheck":
         await update.message.reply_text(
             f"{ERROR_EMOJI} PRICE_CHECK_INTERVAL cannot be changed"
