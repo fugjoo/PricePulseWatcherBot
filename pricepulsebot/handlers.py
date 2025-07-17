@@ -865,16 +865,14 @@ async def settings_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE) -> No
             f"- interval: {config.format_interval(config.DEFAULT_INTERVAL)}\n"
             f"- pricecheck: {config.format_interval(config.PRICE_CHECK_INTERVAL)}\n"
             f"- milestones: {'on' if config.ENABLE_MILESTONE_ALERTS else 'off'}\n"
+            f"- liquidations: {'on' if config.ENABLE_LIQUIDATION_ALERTS else 'off'}\n"
             f"- currency: {config.VS_CURRENCY}"
         )
         await update.message.reply_text(text)
         return
     if len(context.args) < 2:
         await update.message.reply_text(
-            (
-                f"{ERROR_EMOJI} Usage: /settings <threshold|interval|milestones|"
-                "currency> <value>"
-            )
+            f"{ERROR_EMOJI} Usage: /settings <threshold|interval|milestones|liquidations|currency> <value>"
         )
         return
     key = context.args[0].lower()
@@ -910,6 +908,16 @@ async def settings_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE) -> No
         config.ENABLE_MILESTONE_ALERTS = val == "on"
         state = "enabled" if config.ENABLE_MILESTONE_ALERTS else "disabled"
         await update.message.reply_text(f"{SUCCESS_EMOJI} Milestone alerts {state}")
+    elif key == "liquidations":
+        val = value.lower()
+        if val not in {"on", "off"}:
+            await update.message.reply_text(
+                f"{ERROR_EMOJI} Liquidations must be on or off"
+            )
+            return
+        config.ENABLE_LIQUIDATION_ALERTS = val == "on"
+        state = "enabled" if config.ENABLE_LIQUIDATION_ALERTS else "disabled"
+        await update.message.reply_text(f"{SUCCESS_EMOJI} Liquidation alerts {state}")
     elif key == "currency":
         config.VS_CURRENCY = value.lower()
         await update.message.reply_text(

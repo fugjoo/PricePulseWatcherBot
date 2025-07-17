@@ -44,6 +44,9 @@ VOLUME_THRESHOLD = float(os.getenv("VOLUME_THRESHOLD", str(DEFAULT_THRESHOLD)))
 DEFAULT_INTERVAL = parse_duration(os.getenv("DEFAULT_INTERVAL", "5m"))
 PRICE_CHECK_INTERVAL = parse_duration(os.getenv("PRICE_CHECK_INTERVAL", "60s"))
 ENABLE_MILESTONE_ALERTS = os.getenv("ENABLE_MILESTONE_ALERTS", "true").lower() == "true"
+ENABLE_LIQUIDATION_ALERTS = (
+    os.getenv("ENABLE_LIQUIDATION_ALERTS", "false").lower() == "true"
+)
 VS_CURRENCY = os.getenv("DEFAULT_VS_CURRENCY", "usd").lower()
 
 COINGECKO_API_KEY = os.getenv("COINGECKO_API_KEY")

@@ -820,7 +820,7 @@ async def get_news(
 
 
 async def refresh_coin_data(
-    coin: str, session: Optional[aiohttp.ClientSession] = None
+    coin: str, *, session: aiohttp.ClientSession | None = None
 ) -> None:
     """Refresh cached price, market info and chart data for ``coin``."""
 

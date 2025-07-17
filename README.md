@@ -11,7 +11,7 @@ percentage. Create a `.env` from the example and keep your
 - Autocompletion for all bot commands
 - Monitor API health with `/status`
 - Check recent coin news via `/news` (CryptoCompare)
-- Get alerts when trading volume spikes or drops
+- Optional futures liquidation alerts
 
 ## Quickstart
 
@@ -31,6 +31,7 @@ cp .env.example .env             # edit TELEGRAM_TOKEN
 # VOLUME_THRESHOLD sets the volume change percentage for alerts
 # PRICE_CHECK_INTERVAL sets how often prices are fetched
 # ENABLE_MILESTONE_ALERTS toggles milestone notifications
+# ENABLE_LIQUIDATION_ALERTS toggles futures liquidation alerts
 # DEFAULT_VS_CURRENCY sets the reference currency used for prices
 python run.py
 ```
@@ -54,6 +55,7 @@ Create a `.env` file from the example. It holds credentials and runtime options:
 - `DEFAULT_INTERVAL` – subscription interval when none is given
 - `PRICE_CHECK_INTERVAL` – how often prices are checked
 - `ENABLE_MILESTONE_ALERTS` – send messages for price milestones
+- `ENABLE_LIQUIDATION_ALERTS` – enable liquidation event alerts
 - `DEFAULT_VS_CURRENCY` – default currency used for API requests
 
 ### Commands
@@ -70,7 +72,7 @@ Create a `.env` file from the example. It holds credentials and runtime options:
 - `/status` – display API status overview
 - `/milestones [on|off]` – toggle milestone notifications (no args switch)
 - `/settings [key value]` – show or change default settings (threshold,
-  interval, milestones, currency)
+  interval, milestones, liquidations, currency)
 
 Intervals accept plain seconds or values like `1h`, `15m` or `30s`.
 
