@@ -230,11 +230,18 @@ async def check_prices(app) -> None:
             )
         coins = list(by_coin.keys())
         prices: Dict[str, float] = {}
+        infos: Dict[str, dict] = {}
         missing: List[str] = []
         for coin in coins:
             cached = await db.get_coin_data(coin)
-            if cached and cached.get("price") is not None:
-                prices[coin] = float(cached["price"])
+            if cached:
+                if cached.get("price") is not None:
+                    prices[coin] = float(cached["price"])
+                info = cached.get("market_info")
+                if info is not None:
+                    infos[coin] = info
+                else:
+                    missing.append(coin)
             else:
                 missing.append(coin)
         if missing:
@@ -242,9 +249,12 @@ async def check_prices(app) -> None:
                 missing[i : i + 250] for i in range(0, len(missing), 250)  # noqa: E203
             ]
             for group in groups:
-                prices.update(
-                    await api.get_prices(group, session=http_session, user=None)
-                )
+                markets = await api.get_markets(group, session=http_session, user=None)
+                for c, info in markets.items():
+                    price = info.get("current_price")
+                    if price is not None:
+                        prices[c] = float(price)
+                    infos[c] = info
         for coin, subscriptions in by_coin.items():
             price = prices.get(coin)
             if price is None:
@@ -291,8 +301,7 @@ async def check_prices(app) -> None:
                             f"{symbol} moved {raw_change:+.2f}% in "
                             f"{config.format_interval(interval)} (now ${price}"
                         )
-                        cached = await db.get_coin_data(coin)
-                        info = cached.get("market_info") if cached else None
+                        info = infos.get(coin)
                         if info is None:
                             info = await api.get_market_info(coin, user=chat_id)
                         change_24h = None

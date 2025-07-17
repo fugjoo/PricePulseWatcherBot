@@ -47,3 +47,24 @@ async def test_get_prices_batch(monkeypatch):
         )
         prices = await get_prices(["bitcoin", "ethereum"])
         assert prices == {"bitcoin": 1.0, "ethereum": 2.0}
+
+
+@pytest.mark.asyncio
+async def test_get_markets_batch():
+    async with ResponsesMockServer() as ars:
+        ars.add(
+            "api.coingecko.com",
+            "/api/v3/coins/markets",
+            "GET",
+            Response(
+                text=(
+                    '[{"id": "bitcoin", "current_price": 3.0},'
+                    '{"id": "ethereum", "current_price": 4.0}]'
+                ),
+                status=200,
+                headers={"Content-Type": "application/json"},
+            ),
+        )
+        markets = await api.get_markets(["bitcoin", "ethereum"])
+        assert markets["bitcoin"]["current_price"] == 3.0
+        assert markets["ethereum"]["current_price"] == 4.0

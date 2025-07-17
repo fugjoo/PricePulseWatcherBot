@@ -256,6 +256,54 @@ async def get_prices(
     return {}
 
 
+async def get_markets(
+    coins: list[str],
+    session: Optional[aiohttp.ClientSession] = None,
+    *,
+    user: Optional[int] = None,
+) -> dict[str, dict]:
+    """Return market info for multiple ``coins``.
+
+    Parameters
+    ----------
+    coins:
+        List of coin IDs to query.
+    session:
+        Optional session used for the HTTP request.
+    user:
+        User ID for logging.
+
+    Returns
+    -------
+    dict[str, dict]
+        Mapping of coin ID to the market data dictionary.
+    """
+    ids = ",".join(encoded(c) for c in coins)
+    url = (
+        f"{config.COINGECKO_BASE_URL}/coins/markets"
+        f"?vs_currency=usd&ids={ids}&price_change_percentage=24h"
+    )
+    retries = 3
+    owns_session = session is None
+    if owns_session:
+        session = aiohttp.ClientSession()
+    try:
+        for attempt in range(retries):
+            resp = await api_get(
+                url, session=session, headers=config.COINGECKO_HEADERS, user=user
+            )
+            if not resp:
+                return {}
+            if resp.status == 200:
+                data = await resp.json()
+                return {item.get("id"): item for item in data if item.get("id")}
+            await asyncio.sleep(2**attempt)
+    finally:
+        if owns_session and session:
+            await session.close()
+    return {}
+
+
 async def get_coin_info(
     coin: str,
     session: Optional[aiohttp.ClientSession] = None,
