@@ -216,7 +216,10 @@ async def check_prices(app) -> None:
     async with aiohttp.ClientSession() as http_session:
         async with db.aiosqlite.connect(config.DB_FILE) as database:
             cursor = await database.execute(
-                "SELECT id, chat_id, coin_id, threshold, interval, target_price, direction, last_price, last_alert_ts FROM subscriptions"
+                (
+                    "SELECT id, chat_id, coin_id, threshold, interval, target_price, "
+                    "direction, last_price, last_alert_ts FROM subscriptions"
+                )
             )
             rows = await cursor.fetchall()
             await cursor.close()
@@ -839,7 +842,8 @@ async def settings_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE) -> No
         return
     if len(context.args) < 2:
         await update.message.reply_text(
-            f"{ERROR_EMOJI} Usage: /settings <threshold|interval|milestones|currency> <value>"
+            f"{ERROR_EMOJI} Usage: /settings <threshold|interval|milestones|currency>"
+            " <value>"
         )
         return
     key = context.args[0].lower()
