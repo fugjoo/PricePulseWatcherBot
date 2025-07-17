@@ -441,7 +441,9 @@ async def info_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
         await update.message.reply_text(f"{ERROR_EMOJI} No data available")
         return
     if market is None:
-        market = data.get("market_data", {})
+        market = data.get("market_data")
+        if not isinstance(market, dict):
+            market = {}
     price = market.get("current_price", {}).get("usd")
     cap = market.get("market_cap", {}).get("usd")
     change = market.get("price_change_percentage_24h")
