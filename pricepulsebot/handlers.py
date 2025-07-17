@@ -13,8 +13,14 @@ import aiohttp
 import numpy as np
 from matplotlib import dates as mdates
 from matplotlib import pyplot as plt
-from telegram import (Bot, InlineKeyboardButton, InlineKeyboardMarkup,
-                      KeyboardButton, ReplyKeyboardMarkup, Update)
+from telegram import (
+    Bot,
+    InlineKeyboardButton,
+    InlineKeyboardMarkup,
+    KeyboardButton,
+    ReplyKeyboardMarkup,
+    Update,
+)
 from telegram.constants import ChatAction
 from telegram.ext import ContextTypes
 
@@ -37,6 +43,8 @@ WELCOME_EMOJI = "\U0001f44b"
 INFO_EMOJI = "\u2139\ufe0f"
 SUCCESS_EMOJI = "\u2705"
 ERROR_EMOJI = "\u26a0\ufe0f"
+SETTINGS_EMOJI = "\u2699\ufe0f"
+BACK_EMOJI = "\u2b05\ufe0f"
 
 # (name, description) pairs used for help text and bot registration
 COMMANDS: list[tuple[str, str]] = [
@@ -434,7 +442,11 @@ def get_keyboard() -> ReplyKeyboardMarkup:
     subs = [KeyboardButton(f"{SUB_EMOJI} Add {api.symbol_for(c)}") for c in coins]
     keyboard = [
         subs,
-        [KeyboardButton(f"{LIST_EMOJI} List"), KeyboardButton(f"{HELP_EMOJI} Help")],
+        [
+            KeyboardButton(f"{LIST_EMOJI} List"),
+            KeyboardButton(SETTINGS_EMOJI),
+            KeyboardButton(f"{HELP_EMOJI} Help"),
+        ],
     ]
     return ReplyKeyboardMarkup(keyboard, resize_keyboard=True, is_persistent=True)
 
@@ -473,6 +485,31 @@ def get_settings_keyboard() -> InlineKeyboardMarkup:
         ],
     ]
     return InlineKeyboardMarkup(buttons)
+
+
+def get_settings_menu() -> ReplyKeyboardMarkup:
+    """Return a reply keyboard with current default settings."""
+    buttons = [
+        [KeyboardButton(f"threshold: ±{config.DEFAULT_THRESHOLD}%")],
+        [
+            KeyboardButton(
+                f"interval: {config.format_interval(config.DEFAULT_INTERVAL)}"
+            )
+        ],
+        [
+            KeyboardButton(
+                f"milestones: {'on' if config.ENABLE_MILESTONE_ALERTS else 'off'}"
+            )
+        ],
+        [
+            KeyboardButton(
+                f"liquidations: {'on' if config.ENABLE_LIQUIDATION_ALERTS else 'off'}"
+            )
+        ],
+        [KeyboardButton(f"currency: {config.VS_CURRENCY}")],
+        [KeyboardButton(f"{BACK_EMOJI} Back")],
+    ]
+    return ReplyKeyboardMarkup(buttons, resize_keyboard=True, is_persistent=True)
 
 
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
@@ -1132,3 +1169,60 @@ async def menu(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
         await list_cmd(update, context)
     elif text == f"{HELP_EMOJI} Help":
         await help_cmd(update, context)
+    elif text == SETTINGS_EMOJI:
+        await update.message.reply_text(
+            f"{INFO_EMOJI} Current settings:",
+            reply_markup=get_settings_menu(),
+        )
+    elif text.startswith("threshold"):
+        options = [0.1, 0.5, 1.0, 2.0, 5.0]
+        try:
+            idx = options.index(config.DEFAULT_THRESHOLD)
+        except ValueError:
+            idx = -1
+        config.DEFAULT_THRESHOLD = options[(idx + 1) % len(options)]
+        await update.message.reply_text(
+            f"{SUCCESS_EMOJI} Default threshold set to {config.DEFAULT_THRESHOLD}%",
+            reply_markup=get_settings_menu(),
+        )
+    elif text.startswith("interval"):
+        options = [60, 300, 600, 1800, 3600]
+        try:
+            idx = options.index(config.DEFAULT_INTERVAL)
+        except ValueError:
+            idx = -1
+        config.DEFAULT_INTERVAL = options[(idx + 1) % len(options)]
+        interval_text = config.format_interval(config.DEFAULT_INTERVAL)
+        await update.message.reply_text(
+            f"{SUCCESS_EMOJI} Default interval set to {interval_text}",
+            reply_markup=get_settings_menu(),
+        )
+    elif text.startswith("milestones"):
+        config.ENABLE_MILESTONE_ALERTS = not config.ENABLE_MILESTONE_ALERTS
+        state = "enabled" if config.ENABLE_MILESTONE_ALERTS else "disabled"
+        await update.message.reply_text(
+            f"{SUCCESS_EMOJI} Milestone alerts {state}",
+            reply_markup=get_settings_menu(),
+        )
+    elif text.startswith("liquidations"):
+        config.ENABLE_LIQUIDATION_ALERTS = not config.ENABLE_LIQUIDATION_ALERTS
+        state = "enabled" if config.ENABLE_LIQUIDATION_ALERTS else "disabled"
+        await update.message.reply_text(
+            f"{SUCCESS_EMOJI} Liquidation alerts {state}",
+            reply_markup=get_settings_menu(),
+        )
+    elif text.startswith("currency"):
+        options = ["usd", "eur", "btc"]
+        try:
+            idx = options.index(config.VS_CURRENCY)
+        except ValueError:
+            idx = -1
+        config.VS_CURRENCY = options[(idx + 1) % len(options)]
+        await update.message.reply_text(
+            f"{SUCCESS_EMOJI} Default currency set to {config.VS_CURRENCY}",
+            reply_markup=get_settings_menu(),
+        )
+    elif text == f"{BACK_EMOJI} Back":
+        await update.message.reply_text(
+            f"{INFO_EMOJI} Menu:", reply_markup=get_keyboard()
+        )
