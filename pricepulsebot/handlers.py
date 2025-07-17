@@ -545,11 +545,10 @@ async def trends_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None
         price = item.get("price")
         change_24h = item.get("change_24h")
 
-        arrow = ""
+        line = symbol.upper()
         if change_24h is not None:
             arrow = UP_ARROW if change_24h >= 0 else DOWN_ARROW
-
-        line = f"{arrow}{symbol.upper()}"
+            line = f"{arrow} {line}"
         if price is not None:
             line += f" ${format_price(price)}"
         if change_24h is not None:
