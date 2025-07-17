@@ -160,12 +160,12 @@ async def set_last_price(sub_id: int, price: float) -> None:
         await db.commit()
 
 
-async def get_global_data(max_age: int = 300) -> Optional[dict]:
+async def get_global_data() -> Optional[dict]:
     async with aiosqlite.connect(config.DB_FILE) as db:
         cursor = await db.execute("SELECT data, fetched_at FROM global_info WHERE id=1")
         row = await cursor.fetchone()
         await cursor.close()
-    if row and time.time() - row[1] < max_age:
+    if row:
         return json.loads(row[0])
     return None
 
@@ -180,7 +180,7 @@ async def set_global_data(data: dict) -> None:
         await db.commit()
 
 
-async def get_coin_info(coin: str, max_age: int = 300) -> Optional[dict]:
+async def get_coin_info(coin: str) -> Optional[dict]:
     async with aiosqlite.connect(config.DB_FILE) as db:
         cursor = await db.execute(
             "SELECT data, fetched_at FROM coin_info WHERE coin_id=?",
@@ -188,7 +188,7 @@ async def get_coin_info(coin: str, max_age: int = 300) -> Optional[dict]:
         )
         row = await cursor.fetchone()
         await cursor.close()
-    if row and time.time() - row[1] < max_age:
+    if row:
         return json.loads(row[0])
     return None
 
@@ -202,7 +202,7 @@ async def set_coin_info(coin: str, data: dict) -> None:
         await db.commit()
 
 
-async def get_coin_chart(coin: str, days: int, max_age: int = 300) -> Optional[list]:
+async def get_coin_chart(coin: str, days: int) -> Optional[list]:
     async with aiosqlite.connect(config.DB_FILE) as db:
         cursor = await db.execute(
             "SELECT data, fetched_at FROM coin_charts WHERE coin_id=? AND days=?",
@@ -210,7 +210,7 @@ async def get_coin_chart(coin: str, days: int, max_age: int = 300) -> Optional[l
         )
         row = await cursor.fetchone()
         await cursor.close()
-    if row and time.time() - row[1] < max_age:
+    if row:
         return json.loads(row[0])
     return None
 
@@ -227,14 +227,14 @@ async def set_coin_chart(coin: str, days: int, data: list) -> None:
         await db.commit()
 
 
-async def get_trending_coins(max_age: int = 300) -> Optional[list[dict]]:
+async def get_trending_coins() -> Optional[list[dict]]:
     async with aiosqlite.connect(config.DB_FILE) as db:
         cursor = await db.execute(
             "SELECT data, fetched_at FROM trending_coins WHERE id=1"
         )
         row = await cursor.fetchone()
         await cursor.close()
-    if row and time.time() - row[1] < max_age:
+    if row:
         return json.loads(row[0])
     return None
 
@@ -249,7 +249,7 @@ async def set_trending_coins(coins: list[dict]) -> None:
         await db.commit()
 
 
-async def get_coin_data(coin: str, max_age: int = 300) -> Optional[dict]:
+async def get_coin_data(coin: str) -> Optional[dict]:
     async with aiosqlite.connect(config.DB_FILE) as db:
         cursor = await db.execute(
             (
@@ -260,7 +260,7 @@ async def get_coin_data(coin: str, max_age: int = 300) -> Optional[dict]:
         )
         row = await cursor.fetchone()
         await cursor.close()
-    if row and time.time() - row[4] < max_age:
+    if row:
         price, market_json, info_json, chart_json, _ = row
         return {
             "price": price,
