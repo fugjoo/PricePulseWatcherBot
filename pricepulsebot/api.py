@@ -311,6 +311,7 @@ async def fetch_ohlcv(
     limit: int,
     session: Optional[aiohttp.ClientSession] = None,
     *,
+    headers: Optional[dict] = None,
     user: Optional[int] = None,
 ) -> tuple[Optional[list[dict]], Optional[str]]:
     """Fetch OHLCV candles from Binance.
@@ -342,9 +343,7 @@ async def fetch_ohlcv(
     if owns_session:
         session = aiohttp.ClientSession()
     try:
-        resp = await api_get(
-            url, session=session, headers=config.COINGECKO_HEADERS, user=user
-        )
+        resp = await api_get(url, session=session, headers=headers, user=user)
         if not resp:
             return None, "request failed"
         if resp.status == 200:
