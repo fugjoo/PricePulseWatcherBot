@@ -11,14 +11,8 @@ import aiohttp
 import numpy as np
 from matplotlib import dates as mdates
 from matplotlib import pyplot as plt
-from telegram import (
-    Bot,
-    InlineKeyboardButton,
-    InlineKeyboardMarkup,
-    KeyboardButton,
-    ReplyKeyboardMarkup,
-    Update,
-)
+from telegram import (Bot, InlineKeyboardButton, InlineKeyboardMarkup,
+                      KeyboardButton, ReplyKeyboardMarkup, Update)
 from telegram.constants import ChatAction
 from telegram.ext import ContextTypes
 
@@ -91,7 +85,12 @@ def milestone_step(price: float) -> float:
 
 
 def format_price(value: float) -> str:
-    return format(Decimal(str(value)), "f")
+    text = format(Decimal(str(value)), "f")
+    if "." in text:
+        frac = text.split(".")[1]
+        if len(frac) == 1:
+            text += "0"
+    return text
 
 
 def milestones_crossed(last: float, current: float) -> List[float]:
@@ -258,12 +257,18 @@ async def check_prices(app) -> None:
                 for level in milestones_crossed(prev, price):
                     symbol = api.symbol_for(coin)
                     if price > prev:
-                        msg = f"{symbol} breaks through ${level:.0f} (now ${price})"
+                        msg = (
+                            f"{symbol} breaks through ${format_price(level)} "
+                            f"(now ${format_price(price)})"
+                        )
                         await send_rate_limited(
                             app.bot, chat_id, msg, emoji=f"{UP_ARROW} {ROCKET}"
                         )
                     else:
-                        msg = f"{symbol} falls below ${level:.0f} (now ${price})"
+                        msg = (
+                            f"{symbol} falls below ${format_price(level)} "
+                            f"(now ${format_price(price)})"
+                        )
                         await send_rate_limited(
                             app.bot, chat_id, msg, emoji=f"{DOWN_ARROW} {BOMB}"
                         )
