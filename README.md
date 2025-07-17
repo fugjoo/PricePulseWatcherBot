@@ -23,7 +23,7 @@ cp .env.example .env             # edit TELEGRAM_TOKEN
 # COINGECKO_API_KEY is optional for higher rate limits
 # COINGECKO_BASE_URL sets the CoinGecko endpoint (use the pro URL if you have a paid plan)
 # LOG_LEVEL enables verbose output when set to DEBUG
-# LOG_FILE writes logs to the given file (default bot.log)
+# LOG_FILE writes logs to the given file (default bot.log) and recreates it if removed
 # DEFAULT_THRESHOLD and DEFAULT_INTERVAL control new subscriptions
 # PRICE_CHECK_INTERVAL sets how often prices are fetched
 python run.py
@@ -41,7 +41,7 @@ Create a `.env` file from the example. It holds credentials and runtime options:
 - `COINGECKO_API_KEY` – optional CoinGecko key
 - `COINGECKO_BASE_URL` – override to use the pro CoinGecko endpoint
 - `LOG_LEVEL` – log level such as INFO
-- `LOG_FILE` – file to write logs to
+- `LOG_FILE` – file to write logs to (recreated if removed)
 
 - `DEFAULT_THRESHOLD` – percent change that triggers an alert
 - `DEFAULT_INTERVAL` – subscription interval when none is given
