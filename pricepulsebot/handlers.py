@@ -322,8 +322,9 @@ async def refresh_cache(app) -> None:
         cursor = await database.execute("SELECT DISTINCT coin_id FROM subscriptions")
         coins = [row[0] for row in await cursor.fetchall()]
         await cursor.close()
-    for coin in coins:
-        await api.refresh_coin_data(coin)
+    async with aiohttp.ClientSession() as session:
+        for coin in coins:
+            await api.refresh_coin_data(coin, session=session)
     await api.get_global_overview(user=None)
 
 

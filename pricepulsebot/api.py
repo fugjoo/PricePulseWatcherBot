@@ -733,13 +733,21 @@ async def fetch_top_coins() -> None:
         config.logger.error("error fetching top coins: %s", exc)
 
 
-async def refresh_coin_data(coin: str) -> None:
+async def refresh_coin_data(
+    coin: str, session: Optional[aiohttp.ClientSession] = None
+) -> None:
     """Refresh cached price, market info and chart data for ``coin``."""
-    async with aiohttp.ClientSession() as session:
+    owns_session = session is None
+    if owns_session:
+        session = aiohttp.ClientSession()
+    try:
         price = await get_price(coin, session=session, user=None)
         market_info = await get_market_info(coin, session=session, user=None)
         info, _ = await get_coin_info(coin, session=session, user=None)
         chart, _ = await get_market_chart(coin, 7, session=session, user=None)
+    finally:
+        if owns_session and session:
+            await session.close()
     await db.set_coin_data(
         coin,
         {
