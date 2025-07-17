@@ -118,6 +118,15 @@ def trend_emojis(change: float) -> str:
     return UP_ARROW if change >= 0 else DOWN_ARROW
 
 
+def usd_value(value: Optional[object]) -> Optional[float]:
+    """Return the USD float when given either a number or a dict."""
+    if isinstance(value, dict):
+        return value.get("usd")
+    if isinstance(value, (int, float)):
+        return float(value)
+    return None
+
+
 def calculate_volume_profile(candles: List[dict]) -> dict:
     if not candles:
         raise ValueError("no candles provided")
@@ -403,11 +412,11 @@ async def build_sub_entries(chat_id: int) -> List[Tuple[str, str]]:
                 market = {}
         if price is None:
             price = (
-                market.get("current_price", {}).get("usd")
+                usd_value(market.get("current_price"))
                 or await api.get_price(coin, user=chat_id)
                 or 0
             )
-        cap = market.get("market_cap", {}).get("usd")
+        cap = usd_value(market.get("market_cap"))
         change_24h = market.get("price_change_percentage_24h")
         sym = info.get("symbol")
         if sym:
@@ -474,8 +483,8 @@ async def info_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
         market = data.get("market_data")
         if not isinstance(market, dict):
             market = {}
-    price = market.get("current_price", {}).get("usd")
-    cap = market.get("market_cap", {}).get("usd")
+    price = usd_value(market.get("current_price"))
+    cap = usd_value(market.get("market_cap"))
     change = market.get("price_change_percentage_24h")
     sym = data.get("symbol", "").upper()
     config.COIN_SYMBOLS[coin] = sym
