@@ -236,6 +236,7 @@ async def check_prices(app) -> None:
                     Optional[int],
                     Optional[float],
                     Optional[float],
+                    Optional[float],
                 ]
             ],
         ] = {}
@@ -248,6 +249,7 @@ async def check_prices(app) -> None:
             target_price,
             direction,
             last_price,
+            last_volume,
             last_ts,
         ) in rows:
             by_coin.setdefault(coin, []).append(
@@ -259,6 +261,7 @@ async def check_prices(app) -> None:
                     target_price,
                     direction,
                     last_price,
+                    last_volume,
                     last_ts,
                 )
             )
@@ -289,10 +292,16 @@ async def check_prices(app) -> None:
                     if price is not None:
                         prices[c] = float(price)
                     infos[c] = info
+        volumes: Dict[str, float] = {}
+        for coin in coins:
+            vol = await api.get_volume(coin, session=http_session, user=None)
+            if vol is not None:
+                volumes[coin] = vol
         for coin, subscriptions in by_coin.items():
             price = prices.get(coin)
             if price is None:
                 continue
+            volume = volumes.get(coin)
             for (
                 sub_id,
                 chat_id,
@@ -301,10 +310,11 @@ async def check_prices(app) -> None:
                 target_price,
                 direction,
                 last_price,
+                last_volume,
                 last_ts,
             ) in subscriptions:
                 if last_price is None:
-                    await db.set_last_price(sub_id, price)
+                    await db.set_last_price(sub_id, price, volume)
                     MILESTONE_CACHE[(chat_id, coin)] = price
                     continue
                 prev = MILESTONE_CACHE.get((chat_id, coin), last_price)
@@ -370,7 +380,25 @@ async def check_prices(app) -> None:
                         await send_rate_limited(
                             app.bot, chat_id, text, emoji=trend_emojis(raw_change)
                         )
-                    await db.set_last_price(sub_id, price)
+                    if (
+                        volume is not None
+                        and last_volume is not None
+                        and last_volume > 0
+                    ):
+                        raw_vol_change = (volume - last_volume) / last_volume * 100
+                        if abs(raw_vol_change) >= config.VOLUME_THRESHOLD:
+                            symbol = api.symbol_for(coin)
+                            msg = (
+                                f"{symbol} volume {raw_vol_change:+.2f}% "
+                                f"(24h {volume:,.0f})"
+                            )
+                            await send_rate_limited(
+                                app.bot,
+                                chat_id,
+                                msg,
+                                emoji=trend_emojis(raw_vol_change),
+                            )
+                    await db.set_last_price(sub_id, price, volume)
 
 
 async def refresh_cache(app) -> None:
@@ -867,6 +895,7 @@ async def settings_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE) -> No
             f"- interval: {config.format_interval(config.DEFAULT_INTERVAL)}\n"
             f"- pricecheck: {config.format_interval(config.PRICE_CHECK_INTERVAL)}\n"
             f"- milestones: {'on' if config.ENABLE_MILESTONE_ALERTS else 'off'}\n"
+            f"- liquidations: {'on' if config.ENABLE_LIQUIDATION_ALERTS else 'off'}\n"
             f"- currency: {config.VS_CURRENCY}"
         )
         await update.message.reply_text(text)
@@ -910,6 +939,16 @@ async def settings_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE) -> No
         config.ENABLE_MILESTONE_ALERTS = val == "on"
         state = "enabled" if config.ENABLE_MILESTONE_ALERTS else "disabled"
         await update.message.reply_text(f"{SUCCESS_EMOJI} Milestone alerts {state}")
+    elif key == "liquidations":
+        val = value.lower()
+        if val not in {"on", "off"}:
+            await update.message.reply_text(
+                f"{ERROR_EMOJI} Liquidations must be on or off"
+            )
+            return
+        config.ENABLE_LIQUIDATION_ALERTS = val == "on"
+        state = "enabled" if config.ENABLE_LIQUIDATION_ALERTS else "disabled"
+        await update.message.reply_text(f"{SUCCESS_EMOJI} Liquidation alerts {state}")
     elif key == "currency":
         config.VS_CURRENCY = value.lower()
         await update.message.reply_text(
