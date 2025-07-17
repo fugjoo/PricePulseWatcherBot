@@ -54,6 +54,16 @@ async def test_settings_update_milestones():
 
 
 @pytest.mark.asyncio
+async def test_settings_update_liquidations():
+    update = DummyUpdate()
+    ctx = DummyContext(["liquidations", "on"])
+    prev = config.ENABLE_LIQUIDATION_ALERTS
+    await handlers.settings_cmd(update, ctx)
+    assert config.ENABLE_LIQUIDATION_ALERTS is True
+    config.ENABLE_LIQUIDATION_ALERTS = prev
+
+
+@pytest.mark.asyncio
 async def test_settings_pricecheck_readonly():
     update = DummyUpdate()
     ctx = DummyContext(["pricecheck", "30s"])

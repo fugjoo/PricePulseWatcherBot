@@ -777,8 +777,9 @@ async def get_news(
     return None
 
 
-async def refresh_coin_data(coin: str) -> None:
-
+async def refresh_coin_data(
+    coin: str, *, session: aiohttp.ClientSession | None = None
+) -> None:
     """Refresh cached price, market info and chart data for ``coin``."""
     owns_session = session is None
     if owns_session:
