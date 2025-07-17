@@ -7,8 +7,9 @@ appropriate.
 
 import asyncio
 import time
+from collections import deque
 from difflib import get_close_matches
-from typing import Dict, Optional, Tuple
+from typing import Deque, Dict, Optional, Tuple
 from urllib.parse import quote
 
 import aiohttp
@@ -19,6 +20,15 @@ from . import config, db
 PRICE_CACHE: Dict[str, Tuple[float, float]] = {}
 COINGECKO_LIMITER = AsyncLimiter(30, 60)
 LAST_KNOWN_PRICE: Dict[str, float] = {}
+STATUS_HISTORY: Deque[Tuple[float, int]] = deque(maxlen=100)
+
+
+def status_counts() -> Dict[int, int]:
+    """Return a mapping of HTTP status codes to occurrence counts."""
+    counts: Dict[int, int] = {}
+    for _, status in STATUS_HISTORY:
+        counts[status] = counts.get(status, 0) + 1
+    return counts
 
 
 def symbol_for(coin: str) -> str:
@@ -128,6 +138,7 @@ async def api_get(
                     resp = await session.get(url, headers=headers)
             else:
                 resp = await session.get(url, headers=headers)
+            STATUS_HISTORY.append((time.time(), resp.status))
             config.logger.info(
                 "api_request user=%s url=%s status=%s", user, url, resp.status
             )
@@ -138,6 +149,7 @@ async def api_get(
             await asyncio.sleep(wait)
         return resp
     except aiohttp.ClientError as exc:
+        STATUS_HISTORY.append((time.time(), 0))
         config.logger.error("api request failed: %s", exc)
         return None
     finally:
