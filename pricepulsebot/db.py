@@ -67,6 +67,15 @@ async def init_db() -> None:
         )
         await db.execute(
             """
+            CREATE TABLE IF NOT EXISTS feargreed (
+                id INTEGER PRIMARY KEY CHECK (id = 1),
+                data TEXT,
+                fetched_at REAL
+            )
+            """
+        )
+        await db.execute(
+            """
             CREATE TABLE IF NOT EXISTS coin_data (
                 coin_id TEXT PRIMARY KEY,
                 price REAL,
@@ -121,14 +130,17 @@ async def subscribe_coin(
             new_price = target_price if target_price is not None else existing_price
             new_dir = direction if direction is not None else existing_dir
             await db.execute(
-                "UPDATE subscriptions SET threshold=?, interval=?, target_price=?, direction=? WHERE id=?",
+                (
+                    "UPDATE subscriptions SET threshold=?, interval=?, "
+                    "target_price=?, direction=? WHERE id=?"
+                ),
                 (new_th, new_int, new_price, new_dir, sub_id),
             )
         else:
             await db.execute(
                 (
-                    "INSERT INTO subscriptions (chat_id, coin_id, threshold, interval, target_price, direction)"
-                    " VALUES (?, ?, ?, ?, ?, ?)"
+                    "INSERT INTO subscriptions (chat_id, coin_id, threshold, interval, "
+                    "target_price, direction) VALUES (?, ?, ?, ?, ?, ?)"
                 ),
                 (chat_id, coin, threshold, interval, target_price, direction),
             )
@@ -283,6 +295,28 @@ async def set_trending_coins(coins: list[dict]) -> None:
         await db.execute(
             "INSERT INTO trending_coins (id, data, fetched_at) VALUES (1, ?, ?)",
             (json.dumps(coins), time.time()),
+        )
+        await db.commit()
+
+
+async def get_feargreed() -> Optional[dict]:
+    """Return cached Fear & Greed index data if present."""
+    async with aiosqlite.connect(config.DB_FILE) as db:
+        cursor = await db.execute("SELECT data, fetched_at FROM feargreed WHERE id=1")
+        row = await cursor.fetchone()
+        await cursor.close()
+    if row:
+        return json.loads(row[0])
+    return None
+
+
+async def set_feargreed(data: dict) -> None:
+    """Persist Fear & Greed index information."""
+    async with aiosqlite.connect(config.DB_FILE) as db:
+        await db.execute("DELETE FROM feargreed WHERE id=1")
+        await db.execute(
+            "INSERT INTO feargreed (id, data, fetched_at) VALUES (1, ?, ?)",
+            (json.dumps(data), time.time()),
         )
         await db.commit()
 

@@ -249,7 +249,10 @@ async def get_prices(
         Mapping of coin ID to its current price.
     """
     ids = ",".join(encoded(c) for c in coins)
-    url = f"{config.COINGECKO_BASE_URL}/simple/price?ids={ids}&vs_currencies={config.VS_CURRENCY}"
+    url = (
+        f"{config.COINGECKO_BASE_URL}/simple/price"
+        f"?ids={ids}&vs_currencies={config.VS_CURRENCY}"
+    )
     retries = 3
     owns_session = session is None
     if owns_session:
@@ -447,7 +450,8 @@ async def get_market_info(
     """Return market data for ``coin`` such as price and 24h change."""
     url = (
         f"{config.COINGECKO_BASE_URL}/coins/markets"
-        f"?vs_currency={config.VS_CURRENCY}&ids={encoded(coin)}&price_change_percentage=24h"
+        f"?vs_currency={config.VS_CURRENCY}&ids={encoded(coin)}"
+        f"&price_change_percentage=24h"
     )
     headers = config.COINGECKO_HEADERS
     owns_session = session is None
@@ -546,6 +550,37 @@ async def get_global_overview(
                 await db.set_global_data(data)
                 return data, None
             await asyncio.sleep(2**attempt)
+        return None, f"HTTP {resp.status}"
+    finally:
+        if owns_session and session:
+            await session.close()
+
+
+async def get_feargreed_index(
+    session: Optional[aiohttp.ClientSession] = None,
+    *,
+    user: Optional[int] = None,
+) -> tuple[Optional[dict], Optional[str]]:
+    """Return the latest Fear & Greed index data."""
+    cached = await db.get_feargreed()
+    if cached:
+        return cached, None
+    url = "https://api.alternative.me/fng/?limit=1"
+    owns_session = session is None
+    if owns_session:
+        session = aiohttp.ClientSession()
+    try:
+        resp = await api_get(url, session=session, user=user)
+        if not resp:
+            return None, "request failed"
+        if resp.status == 200:
+            data = await resp.json()
+            try:
+                entry = data.get("data", [])[0]
+            except (IndexError, TypeError, AttributeError):
+                return None, "invalid response"
+            await db.set_feargreed(entry)
+            return entry, None
         return None, f"HTTP {resp.status}"
     finally:
         if owns_session and session:
@@ -669,7 +704,8 @@ async def fetch_trending_coins() -> Optional[list[dict]]:
             if ids:
                 markets_url = (
                     f"{config.COINGECKO_BASE_URL}/coins/markets"
-                    f"?vs_currency={config.VS_CURRENCY}&ids={','.join(ids)}&price_change_percentage=24h"
+                    f"?vs_currency={config.VS_CURRENCY}&ids={','.join(ids)}"
+                    f"&price_change_percentage=24h"
                 )
                 market_resp = await api_get(
                     markets_url, session=session, headers=config.COINGECKO_HEADERS
@@ -777,8 +813,9 @@ async def get_news(
     return None
 
 
-async def refresh_coin_data(coin: str) -> None:
-
+async def refresh_coin_data(
+    coin: str, session: Optional[aiohttp.ClientSession] = None
+) -> None:
     """Refresh cached price, market info and chart data for ``coin``."""
     owns_session = session is None
     if owns_session:
