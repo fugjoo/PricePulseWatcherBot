@@ -1,3 +1,5 @@
+"""CLI entry point for running PricePulseWatcherBot."""
+
 import asyncio
 
 from .main import main

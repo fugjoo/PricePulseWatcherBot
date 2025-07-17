@@ -1,3 +1,5 @@
+"""Telegram command and callback handlers used by the bot."""
+
 import asyncio
 import random
 import time
@@ -71,6 +73,7 @@ def format_coin_text(
 
 
 def milestone_step(price: float) -> float:
+    """Return the milestone step size for ``price``."""
     if price >= 1000:
         return 100.0
     if price >= 100:
@@ -91,6 +94,7 @@ def milestone_step(price: float) -> float:
 
 
 def format_price(value: float) -> str:
+    """Format ``value`` as a price string."""
     text = format(Decimal(str(value)), "f")
     if "." in text:
         frac = text.split(".")[1]
@@ -100,6 +104,7 @@ def format_price(value: float) -> str:
 
 
 def milestones_crossed(last: float, current: float) -> List[float]:
+    """Return milestone levels crossed between ``last`` and ``current``."""
     step = milestone_step(max(last, current))
     levels: List[float] = []
     if current > last:
@@ -116,6 +121,7 @@ def milestones_crossed(last: float, current: float) -> List[float]:
 
 
 def trend_emojis(change: float) -> str:
+    """Return emojis representing the direction of ``change``."""
     if change >= 10:
         return f"{UP_ARROW} {ROCKET}"
     if change <= -10:
@@ -133,6 +139,7 @@ def usd_value(value: Optional[object]) -> Optional[float]:
 
 
 def calculate_volume_profile(candles: List[dict]) -> dict:
+    """Calculate the volume profile statistics for given candles."""
     if not candles:
         raise ValueError("no candles provided")
     min_price = min(c["low"] for c in candles)
@@ -186,6 +193,7 @@ def calculate_volume_profile(candles: List[dict]) -> dict:
 async def send_rate_limited(
     bot: Bot, chat_id: int, text: str, emoji: str = DEFAULT_ALERT_EMOJI
 ) -> None:
+    """Send a message while enforcing per-user and global rate limits."""
     now = time.time()
     user_q = user_messages[chat_id]
     while user_q and now - user_q[0] > 60:
@@ -204,6 +212,7 @@ async def send_rate_limited(
 
 
 async def check_prices(app) -> None:
+    """Check all subscriptions and send price alerts when needed."""
     async with aiohttp.ClientSession() as http_session:
         async with db.aiosqlite.connect(config.DB_FILE) as database:
             cursor = await database.execute(
@@ -299,6 +308,7 @@ async def check_prices(app) -> None:
 
 
 async def refresh_cache(app) -> None:
+    """Refresh cached data for coins referenced in the database."""
     async with db.aiosqlite.connect(config.DB_FILE) as database:
         cursor = await database.execute("SELECT DISTINCT coin_id FROM subscriptions")
         coins = [row[0] for row in await cursor.fetchall()]
@@ -309,6 +319,7 @@ async def refresh_cache(app) -> None:
 
 
 def get_keyboard() -> ReplyKeyboardMarkup:
+    """Return the default reply keyboard shown to users."""
     coins_source = config.COINS or config.TOP_COINS[:20] or ["bitcoin"]
     coins = random.sample(coins_source, k=min(3, len(coins_source)))
     subs = [KeyboardButton(f"{SUB_EMOJI} Add {api.symbol_for(c)}") for c in coins]
@@ -320,6 +331,7 @@ def get_keyboard() -> ReplyKeyboardMarkup:
 
 
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    """Send a welcome message and show the main keyboard."""
     await update.message.reply_text(
         f"{WELCOME_EMOJI} Welcome to {config.BOT_NAME}! Use /add or the "
         "buttons below to subscribe to price alerts.",
@@ -328,6 +340,7 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
 
 
 async def help_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    """Display available commands and usage information."""
     await update.message.reply_text(
         f"{INFO_EMOJI} /add <coin> [pct] [interval] - subscribe to price alerts\n"
         "/remove <coin> - remove subscription\n"
@@ -343,6 +356,7 @@ async def help_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
 
 
 async def subscribe_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    """Subscribe the chat to price alerts for a coin."""
     if not context.args:
         await update.message.reply_text(
             f"{ERROR_EMOJI} Usage: /add <coin> [pct] [interval]"
@@ -385,6 +399,7 @@ async def subscribe_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE) -> N
 
 
 async def unsubscribe_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    """Remove a price alert subscription."""
     if not context.args:
         await update.message.reply_text(f"{ERROR_EMOJI} Usage: /remove <coin>")
         return
@@ -397,6 +412,7 @@ async def unsubscribe_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
 
 
 async def build_sub_entries(chat_id: int) -> List[Tuple[str, str]]:
+    """Return formatted subscription entries for ``chat_id``."""
     subs = await db.list_subscriptions(chat_id)
     entries: List[Tuple[str, str]] = []
     for _, coin, threshold, interval, *_ in subs:
@@ -441,6 +457,7 @@ async def build_sub_entries(chat_id: int) -> List[Tuple[str, str]]:
 
 
 async def list_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    """List all active subscriptions for the chat."""
     await context.bot.send_chat_action(
         chat_id=update.effective_chat.id, action=ChatAction.TYPING
     )
@@ -456,6 +473,7 @@ async def list_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
 
 
 async def info_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    """Show detailed information about a coin."""
     if not context.args:
         await update.message.reply_text(f"{ERROR_EMOJI} Usage: /info <coin>")
         return
@@ -505,6 +523,7 @@ async def info_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
 
 
 async def chart_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    """Send a price chart image for a coin."""
     if not context.args:
         await update.message.reply_text(f"{ERROR_EMOJI} Usage: /chart <coin> [days]")
         return
@@ -557,6 +576,7 @@ async def chart_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
 
 
 async def global_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    """Display global market statistics."""
     data, err = await api.get_global_overview(user=update.effective_chat.id)
     if err:
         await update.message.reply_text(f"{ERROR_EMOJI} {err}")
@@ -588,6 +608,7 @@ async def global_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None
 
 
 async def trends_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    """Display the current trending coins."""
     data = await api.fetch_trending_coins()
     if not data:
         await update.message.reply_text(f"{ERROR_EMOJI} Failed to fetch data")
@@ -617,6 +638,7 @@ async def trends_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None
 
 
 async def valuearea_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    """Calculate and display the volume value area for a symbol."""
     if len(context.args) < 3:
         await update.message.reply_text(
             f"{ERROR_EMOJI} Usage: /valuearea <symbol> <interval> <count>"
@@ -654,6 +676,7 @@ async def valuearea_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE) -> N
 
 
 async def milestones_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    """Toggle milestone alerts or set their state explicitly."""
     if not context.args:
         config.ENABLE_MILESTONE_ALERTS = not config.ENABLE_MILESTONE_ALERTS
         state = "enabled" if config.ENABLE_MILESTONE_ALERTS else "disabled"
@@ -669,6 +692,7 @@ async def milestones_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
 
 
 async def settings_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    """View or modify default alert settings."""
     if not context.args:
         text = (
             f"{INFO_EMOJI} Current settings:\n"
@@ -726,6 +750,7 @@ async def settings_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE) -> No
 
 
 async def button(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    """Handle inline keyboard button callbacks."""
     query = update.callback_query
     await query.answer()
     if query.data.startswith("sub:"):
@@ -773,6 +798,7 @@ async def button(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
 
 
 async def menu(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    """Handle menu button presses from custom keyboards."""
     if not update.message:
         return
     text = update.message.text.strip()

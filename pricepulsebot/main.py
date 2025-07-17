@@ -1,3 +1,5 @@
+"""Main entry point for starting the Telegram bot."""
+
 import asyncio
 import os
 import signal
@@ -16,6 +18,7 @@ from . import api, config, db, handlers
 
 
 async def main() -> None:
+    """Run the Telegram bot until the process receives a stop signal."""
     await db.init_db()
     await api.fetch_trending_coins()
     await api.fetch_top_coins()
