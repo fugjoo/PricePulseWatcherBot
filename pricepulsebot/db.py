@@ -96,7 +96,6 @@ async def init_db() -> None:
                 interval INTEGER,
                 milestones INTEGER,
                 volume INTEGER,
-                liquidations INTEGER,
                 currency TEXT
             )
             """
@@ -400,7 +399,7 @@ async def get_user_settings(chat_id: int) -> dict:
         cursor = await db.execute(
             (
                 "SELECT threshold, interval, milestones, volume, "
-                "liquidations, currency FROM user_settings WHERE chat_id=?"
+                "currency FROM user_settings WHERE chat_id=?"
             ),
             (chat_id,),
         )
@@ -411,7 +410,6 @@ async def get_user_settings(chat_id: int) -> dict:
         "interval": config.DEFAULT_INTERVAL,
         "milestones": config.ENABLE_MILESTONE_ALERTS,
         "volume": config.ENABLE_VOLUME_ALERTS,
-        "liquidations": config.ENABLE_LIQUIDATION_ALERTS,
         "currency": config.VS_CURRENCY,
     }
     if row:
@@ -420,12 +418,11 @@ async def get_user_settings(chat_id: int) -> dict:
             "interval",
             "milestones",
             "volume",
-            "liquidations",
             "currency",
         ]
         for key, value in zip(keys, row):
             if value is not None:
-                if key in {"milestones", "volume", "liquidations"}:
+                if key in {"milestones", "volume"}:
                     settings[key] = bool(value)
                 else:
                     settings[key] = value

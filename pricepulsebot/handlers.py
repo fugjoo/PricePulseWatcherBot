@@ -505,12 +505,6 @@ async def get_settings_keyboard(chat_id: int) -> InlineKeyboardMarkup:
         ],
         [
             InlineKeyboardButton(
-                f"liquidations: {'on' if settings['liquidations'] else 'off'}",
-                callback_data="settings:liquidations",
-            )
-        ],
-        [
-            InlineKeyboardButton(
                 f"currency: {settings['currency']}", callback_data="settings:currency"
             )
         ],
@@ -526,11 +520,6 @@ async def get_settings_menu(chat_id: int) -> ReplyKeyboardMarkup:
         [KeyboardButton(f"interval: {config.format_interval(settings['interval'])}")],
         [KeyboardButton(f"milestones: {'on' if settings['milestones'] else 'off'}")],
         [KeyboardButton(f"volume: {'on' if settings['volume'] else 'off'}")],
-        [
-            KeyboardButton(
-                f"liquidations: {'on' if settings['liquidations'] else 'off'}"
-            )
-        ],
         [KeyboardButton(f"currency: {settings['currency']}")],
         [KeyboardButton(f"{BACK_EMOJI} Back")],
     ]
@@ -1016,8 +1005,7 @@ async def settings_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE) -> No
     if len(context.args) < 2:
         usage = (
             f"{ERROR_EMOJI} Usage: "
-            "/settings <threshold|interval|milestones|volume|liquidations|"
-            "currency> <value>"
+            "/settings <threshold|interval|milestones|volume|currency> <value>"
         )
         await update.message.reply_text(usage)
         return
@@ -1069,19 +1057,6 @@ async def settings_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE) -> No
         await db.set_user_settings(chat_id, volume=int(config.ENABLE_VOLUME_ALERTS))
         state = "enabled" if config.ENABLE_VOLUME_ALERTS else "disabled"
         await update.message.reply_text(f"{SUCCESS_EMOJI} Volume alerts {state}")
-    elif key == "liquidations":
-        val = value.lower()
-        if val not in {"on", "off"}:
-            await update.message.reply_text(
-                f"{ERROR_EMOJI} Liquidations must be on or off"
-            )
-            return
-        config.ENABLE_LIQUIDATION_ALERTS = val == "on"
-        await db.set_user_settings(
-            chat_id, liquidations=int(config.ENABLE_LIQUIDATION_ALERTS)
-        )
-        state = "enabled" if config.ENABLE_LIQUIDATION_ALERTS else "disabled"
-        await update.message.reply_text(f"{SUCCESS_EMOJI} Liquidation alerts {state}")
     elif key == "currency":
         config.VS_CURRENCY = value.lower()
         await db.set_user_settings(chat_id, currency=config.VS_CURRENCY)
@@ -1194,10 +1169,6 @@ async def button(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
             config.ENABLE_VOLUME_ALERTS = not config.ENABLE_VOLUME_ALERTS
             state = "enabled" if config.ENABLE_VOLUME_ALERTS else "disabled"
             text = f"{SUCCESS_EMOJI} Volume alerts {state}"
-        elif key == "liquidations":
-            config.ENABLE_LIQUIDATION_ALERTS = not config.ENABLE_LIQUIDATION_ALERTS
-            state = "enabled" if config.ENABLE_LIQUIDATION_ALERTS else "disabled"
-            text = f"{SUCCESS_EMOJI} Liquidation alerts {state}"
         elif key == "currency":
             options = ["usd", "eur", "btc"]
             try:
@@ -1308,17 +1279,6 @@ async def menu(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
         menu = await get_settings_menu(update.effective_chat.id)
         await update.message.reply_text(
             f"{SUCCESS_EMOJI} Volume alerts {state}",
-            reply_markup=menu,
-        )
-    elif text.startswith("liquidations"):
-        config.ENABLE_LIQUIDATION_ALERTS = not config.ENABLE_LIQUIDATION_ALERTS
-        await db.set_user_settings(
-            update.effective_chat.id, liquidations=int(config.ENABLE_LIQUIDATION_ALERTS)
-        )
-        state = "enabled" if config.ENABLE_LIQUIDATION_ALERTS else "disabled"
-        menu = await get_settings_menu(update.effective_chat.id)
-        await update.message.reply_text(
-            f"{SUCCESS_EMOJI} Liquidation alerts {state}",
             reply_markup=menu,
         )
     elif text.startswith("currency"):
