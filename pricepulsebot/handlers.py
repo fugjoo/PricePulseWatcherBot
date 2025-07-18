@@ -1092,25 +1092,38 @@ async def settings_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE) -> No
 
 
 async def status_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
-    """Show API request status counts and a status code chart."""
+    """Show bot, API and database info plus a status timeline."""
     counts = api.status_counts()
-    if not counts:
+    history = [(ts, status) for ts, status in api.STATUS_HISTORY]
+    if not history:
         await update.message.reply_text(f"{INFO_EMOJI} No API requests recorded")
         return
-    codes = sorted(counts)
-    plt.figure(figsize=(4, 3))
-    plt.bar([str(c) for c in codes], [counts[c] for c in codes])
-    plt.xlabel("HTTP status")
-    plt.ylabel("Count")
-    plt.title("API responses")
+
+    times = [datetime.fromtimestamp(ts) for ts, _ in history]
+    statuses = [s for _, s in history]
+    plt.figure(figsize=(6, 3))
+    plt.plot(times, statuses, drawstyle="steps-post")
+    ax = plt.gca()
+    ax.xaxis.set_major_locator(mdates.AutoDateLocator())
+    ax.xaxis.set_major_formatter(mdates.DateFormatter("%H:%M"))
+    plt.xlabel("Time")
+    plt.ylabel("HTTP status")
+    plt.title("API status last 3h")
     plt.tight_layout()
     buf = BytesIO()
     plt.savefig(buf, format="png")
     plt.close()
     buf.seek(0)
     await context.bot.send_photo(update.effective_chat.id, buf)
-    lines = [f"{code}: {counts[code]}" for code in codes]
-    text = f"{INFO_EMOJI} API responses:\n" + "\n".join(lines)
+
+    db_count, db_size = await db.get_db_stats()
+    lines = [f"{code}: {counts[code]}" for code in sorted(counts)]
+    text = (
+        f"{INFO_EMOJI} Bot: {config.BOT_NAME}\n"
+        f"API: {config.COINGECKO_BASE_URL}\n"
+        f"DB: {config.DB_FILE} ({db_count} subs, {db_size // 1024} kB)\n"
+        "API responses:\n" + "\n".join(lines)
+    )
     await update.message.reply_text(text)
 
 
