@@ -134,7 +134,10 @@ def milestone_step(price: float) -> float:
 
 def format_price(value: float) -> str:
     """Format ``value`` as a price string."""
-    text = format(Decimal(str(value)), "f")
+    # limit precision to avoid floating point artifacts like
+    # ``0.00013000000000000002``
+    d = Decimal(value).quantize(Decimal("1e-8"))
+    text = format(d.normalize(), "f")
     if "." in text:
         frac = text.split(".")[1]
         if len(frac) == 1:
