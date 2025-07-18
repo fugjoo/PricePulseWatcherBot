@@ -51,13 +51,13 @@ COMMAND_CATEGORIES: dict[str, list[tuple[str, str]]] = {
     "Start": [
         ("start", "Show menu"),
     ],
-    "Abos": [
+    "Subscriptions": [
         ("add", "Subscribe to price alerts"),
         ("remove", "Remove subscription"),
         ("clear", "Remove all subscriptions"),
         ("list", "List subscriptions"),
     ],
-    "Infos und Tools": [
+    "Info & Tools": [
         ("info", "Coin information"),
         ("chart", "Price chart"),
         ("news", "Latest news"),
@@ -66,7 +66,7 @@ COMMAND_CATEGORIES: dict[str, list[tuple[str, str]]] = {
         ("feargreed", "Market sentiment"),
         ("valuearea", "Volume profile"),
     ],
-    "Allgemeines": [
+    "General": [
         ("help", "Show help"),
     ],
     "Bot Settings": [
