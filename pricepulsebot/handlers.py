@@ -980,7 +980,7 @@ async def valuearea_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE) -> N
 async def settings_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     """View or modify default alert settings."""
     if not context.args:
-        text = f"{INFO_EMOJI} Current settings:"
+        text = f"{INFO_EMOJI} Your settings"
         await update.message.reply_text(text, reply_markup=get_settings_menu())
         return
     if len(context.args) < 2:
@@ -1198,7 +1198,7 @@ async def menu(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
         await help_cmd(update, context)
     elif text == SETTINGS_EMOJI:
         await update.message.reply_text(
-            f"{INFO_EMOJI} Current settings:",
+            f"{INFO_EMOJI} Your settings",
             reply_markup=get_settings_menu(),
         )
     elif text.startswith("threshold"):
@@ -1258,5 +1258,5 @@ async def menu(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
         )
     elif text == f"{BACK_EMOJI} Back":
         await update.message.reply_text(
-            f"{INFO_EMOJI} Menu:", reply_markup=get_keyboard()
+            f"{INFO_EMOJI} Main menu", reply_markup=get_keyboard()
         )
