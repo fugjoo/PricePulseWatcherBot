@@ -74,7 +74,6 @@ Create a `.env` file from the example. It holds credentials and runtime options:
 - `/feargreed` – show daily market sentiment
 - `/status` – display API status overview
 - `/settings [key value]` – show or change default settings (threshold,
- `/settings [key value]` – show or change default settings (threshold,
   interval, milestones, volume, liquidations, currency)
 
 Intervals accept plain seconds or values like `1h`, `15m` or `30s`.
