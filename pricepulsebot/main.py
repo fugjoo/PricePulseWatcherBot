@@ -59,7 +59,12 @@ async def main() -> None:
         scheduler.add_job(
             liquidations.check_liquidations, "interval", minutes=1, args=(app,)
         )
-    scheduler.add_job(handlers.refresh_cache, "interval", minutes=5, args=(app,))
+    scheduler.add_job(
+        handlers.refresh_cache,
+        "interval",
+        seconds=config.PRICE_CHECK_INTERVAL,
+        args=(app,),
+    )
     scheduler.add_job(api.fetch_trending_coins, "interval", minutes=10)
     scheduler.add_job(api.fetch_top_coins, "interval", minutes=10)
     scheduler.start()
