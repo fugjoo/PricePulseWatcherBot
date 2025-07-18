@@ -32,18 +32,23 @@ ROCKET = "\U0001f680"
 BOMB = "\U0001f4a3"
 POSITIVE_TREND_EMOJIS = [
     "\U0001f4c8",
-    "\U0001f929",
-    "\U0001f4aa",
     "\U0001f680",
-    "\U0001f92f",
-    "\U0001f389",
+    "\U0001f4aa",
+    "\U0001f973",
+    "\U0001f911",
+    "\U0001f4b9",
+    "\U0001f4ca",
 ]
+
 NEGATIVE_TREND_EMOJIS = [
     "\U0001f4c9",
-    "\U0001f61e",
-    "\U0001f4a3",
+    "\U0001f61f",
     "\U0001f480",
-    "\u26a0\ufe0f",
+    "\U0001f53b",
+    "\U0001f630",
+    "\U0001f525",
+    "\U0001f9e8",
+    "\u26d4",
 ]
 DEFAULT_ALERT_EMOJI = UP_ARROW
 
