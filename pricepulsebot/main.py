@@ -14,7 +14,7 @@ from telegram.ext import (
     filters,
 )
 
-from . import api, config, db, handlers, liquidations
+from . import api, config, db, handlers
 
 
 async def main() -> None:
@@ -55,10 +55,6 @@ async def main() -> None:
         seconds=config.PRICE_CHECK_INTERVAL,
         args=(app,),
     )
-    if config.ENABLE_LIQUIDATION_ALERTS:
-        scheduler.add_job(
-            liquidations.check_liquidations, "interval", minutes=1, args=(app,)
-        )
     scheduler.add_job(
         handlers.refresh_cache,
         "interval",
