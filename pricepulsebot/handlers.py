@@ -303,6 +303,8 @@ async def check_prices(app) -> None:
                     last_ts,
                 )
             )
+        chat_ids = {row[1] for row in rows}
+        settings_map = {cid: await db.get_user_settings(cid) for cid in chat_ids}
         coins = list(by_coin.keys())
         prices: Dict[str, float] = {}
         infos: Dict[str, dict] = {}
@@ -331,7 +333,7 @@ async def check_prices(app) -> None:
                         prices[c] = float(price)
                     infos[c] = info
         volumes: Dict[str, float] = {}
-        if config.ENABLE_VOLUME_ALERTS:
+        if any(s["volume"] for s in settings_map.values()):
             for coin in coins:
                 vol = await api.get_volume(coin, session=http_session, user=None)
                 if vol is not None:
@@ -357,7 +359,8 @@ async def check_prices(app) -> None:
                     MILESTONE_CACHE[(chat_id, coin)] = price
                     continue
                 prev = MILESTONE_CACHE.get((chat_id, coin), last_price)
-                if config.ENABLE_MILESTONE_ALERTS:
+                settings = settings_map.get(chat_id) or {}
+                if settings.get("milestones", config.ENABLE_MILESTONE_ALERTS):
                     for level in milestones_crossed(prev, price):
                         symbol = api.symbol_for(coin)
                         if price > prev:
@@ -419,7 +422,7 @@ async def check_prices(app) -> None:
                         await send_rate_limited(
                             app.bot, chat_id, text, emoji=trend_emojis(raw_change)
                         )
-                    if config.ENABLE_VOLUME_ALERTS:
+                    if settings.get("volume", config.ENABLE_VOLUME_ALERTS):
                         if (
                             volume is not None
                             and last_volume is not None
@@ -469,69 +472,63 @@ def get_keyboard() -> ReplyKeyboardMarkup:
     return ReplyKeyboardMarkup(keyboard, resize_keyboard=True, is_persistent=True)
 
 
-def get_settings_keyboard() -> InlineKeyboardMarkup:
-    """Return an inline keyboard showing current default settings."""
+async def get_settings_keyboard(chat_id: int) -> InlineKeyboardMarkup:
+    """Return an inline keyboard showing current settings for ``chat_id``."""
+    settings = await db.get_user_settings(chat_id)
     buttons = [
         [
             InlineKeyboardButton(
-                f"threshold: ±{config.DEFAULT_THRESHOLD}%",
+                f"threshold: ±{settings['threshold']}%",
                 callback_data="settings:threshold",
             )
         ],
         [
             InlineKeyboardButton(
-                f"interval: {config.format_interval(config.DEFAULT_INTERVAL)}",
+                f"interval: {config.format_interval(settings['interval'])}",
                 callback_data="settings:interval",
             )
         ],
         [
             InlineKeyboardButton(
-                f"milestones: {'on' if config.ENABLE_MILESTONE_ALERTS else 'off'}",
+                f"milestones: {'on' if settings['milestones'] else 'off'}",
                 callback_data="settings:milestones",
             )
         ],
         [
             InlineKeyboardButton(
-                f"volume: {'on' if config.ENABLE_VOLUME_ALERTS else 'off'}",
+                f"volume: {'on' if settings['volume'] else 'off'}",
                 callback_data="settings:volume",
             )
         ],
         [
             InlineKeyboardButton(
-                f"liquidations: {'on' if config.ENABLE_LIQUIDATION_ALERTS else 'off'}",
+                f"liquidations: {'on' if settings['liquidations'] else 'off'}",
                 callback_data="settings:liquidations",
             )
         ],
         [
             InlineKeyboardButton(
-                f"currency: {config.VS_CURRENCY}", callback_data="settings:currency"
+                f"currency: {settings['currency']}", callback_data="settings:currency"
             )
         ],
     ]
     return InlineKeyboardMarkup(buttons)
 
 
-def get_settings_menu() -> ReplyKeyboardMarkup:
-    """Return a reply keyboard with current default settings."""
+async def get_settings_menu(chat_id: int) -> ReplyKeyboardMarkup:
+    """Return a reply keyboard with current settings for ``chat_id``."""
+    settings = await db.get_user_settings(chat_id)
     buttons = [
-        [KeyboardButton(f"threshold: ±{config.DEFAULT_THRESHOLD}%")],
+        [KeyboardButton(f"threshold: ±{settings['threshold']}%")],
+        [KeyboardButton(f"interval: {config.format_interval(settings['interval'])}")],
+        [KeyboardButton(f"milestones: {'on' if settings['milestones'] else 'off'}")],
+        [KeyboardButton(f"volume: {'on' if settings['volume'] else 'off'}")],
         [
             KeyboardButton(
-                f"interval: {config.format_interval(config.DEFAULT_INTERVAL)}"
+                f"liquidations: {'on' if settings['liquidations'] else 'off'}"
             )
         ],
-        [
-            KeyboardButton(
-                f"milestones: {'on' if config.ENABLE_MILESTONE_ALERTS else 'off'}"
-            )
-        ],
-        [KeyboardButton(f"volume: {'on' if config.ENABLE_VOLUME_ALERTS else 'off'}")],
-        [
-            KeyboardButton(
-                f"liquidations: {'on' if config.ENABLE_LIQUIDATION_ALERTS else 'off'}"
-            )
-        ],
-        [KeyboardButton(f"currency: {config.VS_CURRENCY}")],
+        [KeyboardButton(f"currency: {settings['currency']}")],
         [KeyboardButton(f"{BACK_EMOJI} Back")],
     ]
     return ReplyKeyboardMarkup(buttons, resize_keyboard=True, is_persistent=True)
@@ -576,9 +573,10 @@ async def subscribe_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE) -> N
             msg += f". Did you mean {syms}?"
         await update.message.reply_text(msg)
         return
+    settings = await db.get_user_settings(update.effective_chat.id)
     target_price = None
     direction = None
-    threshold = config.DEFAULT_THRESHOLD
+    threshold = settings["threshold"]
     arg_idx = 1
     if len(context.args) > 1:
         arg = context.args[1]
@@ -603,7 +601,7 @@ async def subscribe_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE) -> N
         interval_str = (
             context.args[arg_idx]
             if len(context.args) > arg_idx
-            else str(config.DEFAULT_INTERVAL)
+            else str(settings["interval"])
         )
         interval = config.parse_duration(interval_str)
     except ValueError:
@@ -980,7 +978,8 @@ async def settings_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE) -> No
     """View or modify default alert settings."""
     if not context.args:
         text = f"{INFO_EMOJI} Your settings"
-        await update.message.reply_text(text, reply_markup=get_settings_menu())
+        menu = await get_settings_menu(update.effective_chat.id)
+        await update.message.reply_text(text, reply_markup=menu)
         return
     if len(context.args) < 2:
         usage = (
@@ -992,12 +991,14 @@ async def settings_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE) -> No
         return
     key = context.args[0].lower()
     value = context.args[1]
+    chat_id = update.effective_chat.id
     if key == "threshold":
         try:
             config.DEFAULT_THRESHOLD = float(value)
         except ValueError:
             await update.message.reply_text(f"{ERROR_EMOJI} Threshold must be a number")
             return
+        await db.set_user_settings(chat_id, threshold=config.DEFAULT_THRESHOLD)
         await update.message.reply_text(
             f"{SUCCESS_EMOJI} Default threshold set to {config.DEFAULT_THRESHOLD}%"
         )
@@ -1010,6 +1011,7 @@ async def settings_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE) -> No
             )
             return
         interval_text = config.format_interval(config.DEFAULT_INTERVAL)
+        await db.set_user_settings(chat_id, interval=config.DEFAULT_INTERVAL)
         await update.message.reply_text(
             f"{SUCCESS_EMOJI} Default interval set to {interval_text}"
         )
@@ -1021,6 +1023,9 @@ async def settings_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE) -> No
             )
             return
         config.ENABLE_MILESTONE_ALERTS = val == "on"
+        await db.set_user_settings(
+            chat_id, milestones=int(config.ENABLE_MILESTONE_ALERTS)
+        )
         state = "enabled" if config.ENABLE_MILESTONE_ALERTS else "disabled"
         await update.message.reply_text(f"{SUCCESS_EMOJI} Milestone alerts {state}")
     elif key == "volume":
@@ -1029,6 +1034,7 @@ async def settings_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE) -> No
             await update.message.reply_text(f"{ERROR_EMOJI} Volume must be on or off")
             return
         config.ENABLE_VOLUME_ALERTS = val == "on"
+        await db.set_user_settings(chat_id, volume=int(config.ENABLE_VOLUME_ALERTS))
         state = "enabled" if config.ENABLE_VOLUME_ALERTS else "disabled"
         await update.message.reply_text(f"{SUCCESS_EMOJI} Volume alerts {state}")
     elif key == "liquidations":
@@ -1039,10 +1045,14 @@ async def settings_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE) -> No
             )
             return
         config.ENABLE_LIQUIDATION_ALERTS = val == "on"
+        await db.set_user_settings(
+            chat_id, liquidations=int(config.ENABLE_LIQUIDATION_ALERTS)
+        )
         state = "enabled" if config.ENABLE_LIQUIDATION_ALERTS else "disabled"
         await update.message.reply_text(f"{SUCCESS_EMOJI} Liquidation alerts {state}")
     elif key == "currency":
         config.VS_CURRENCY = value.lower()
+        await db.set_user_settings(chat_id, currency=config.VS_CURRENCY)
         await update.message.reply_text(
             f"{SUCCESS_EMOJI} Default currency set to {config.VS_CURRENCY}"
         )
@@ -1153,7 +1163,8 @@ async def button(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
             text = f"{SUCCESS_EMOJI} Default currency set to {config.VS_CURRENCY}"
         if text:
             await context.bot.send_message(query.message.chat_id, text)
-        await query.edit_message_reply_markup(reply_markup=get_settings_keyboard())
+        keyboard = await get_settings_keyboard(query.message.chat_id)
+        await query.edit_message_reply_markup(reply_markup=keyboard)
     elif query.data == "list":
         entries = await build_sub_entries(query.message.chat_id)
         if not entries:
@@ -1196,9 +1207,10 @@ async def menu(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     elif text == f"{HELP_EMOJI} Help":
         await help_cmd(update, context)
     elif text == SETTINGS_EMOJI:
+        menu = await get_settings_menu(update.effective_chat.id)
         await update.message.reply_text(
             f"{INFO_EMOJI} Your settings",
-            reply_markup=get_settings_menu(),
+            reply_markup=menu,
         )
     elif text.startswith("threshold"):
         options = [0.1, 0.5, 1.0, 2.0, 5.0]
@@ -1207,9 +1219,13 @@ async def menu(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
         except ValueError:
             idx = -1
         config.DEFAULT_THRESHOLD = options[(idx + 1) % len(options)]
+        await db.set_user_settings(
+            update.effective_chat.id, threshold=config.DEFAULT_THRESHOLD
+        )
+        menu = await get_settings_menu(update.effective_chat.id)
         await update.message.reply_text(
             f"{SUCCESS_EMOJI} Default threshold set to {config.DEFAULT_THRESHOLD}%",
-            reply_markup=get_settings_menu(),
+            reply_markup=menu,
         )
     elif text.startswith("interval"):
         options = [60, 300, 600, 1800, 3600]
@@ -1219,30 +1235,46 @@ async def menu(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
             idx = -1
         config.DEFAULT_INTERVAL = options[(idx + 1) % len(options)]
         interval_text = config.format_interval(config.DEFAULT_INTERVAL)
+        await db.set_user_settings(
+            update.effective_chat.id, interval=config.DEFAULT_INTERVAL
+        )
+        menu = await get_settings_menu(update.effective_chat.id)
         await update.message.reply_text(
             f"{SUCCESS_EMOJI} Default interval set to {interval_text}",
-            reply_markup=get_settings_menu(),
+            reply_markup=menu,
         )
     elif text.startswith("milestones"):
         config.ENABLE_MILESTONE_ALERTS = not config.ENABLE_MILESTONE_ALERTS
+        await db.set_user_settings(
+            update.effective_chat.id, milestones=int(config.ENABLE_MILESTONE_ALERTS)
+        )
         state = "enabled" if config.ENABLE_MILESTONE_ALERTS else "disabled"
+        menu = await get_settings_menu(update.effective_chat.id)
         await update.message.reply_text(
             f"{SUCCESS_EMOJI} Milestone alerts {state}",
-            reply_markup=get_settings_menu(),
+            reply_markup=menu,
         )
     elif text.startswith("volume"):
         config.ENABLE_VOLUME_ALERTS = not config.ENABLE_VOLUME_ALERTS
+        await db.set_user_settings(
+            update.effective_chat.id, volume=int(config.ENABLE_VOLUME_ALERTS)
+        )
         state = "enabled" if config.ENABLE_VOLUME_ALERTS else "disabled"
+        menu = await get_settings_menu(update.effective_chat.id)
         await update.message.reply_text(
             f"{SUCCESS_EMOJI} Volume alerts {state}",
-            reply_markup=get_settings_menu(),
+            reply_markup=menu,
         )
     elif text.startswith("liquidations"):
         config.ENABLE_LIQUIDATION_ALERTS = not config.ENABLE_LIQUIDATION_ALERTS
+        await db.set_user_settings(
+            update.effective_chat.id, liquidations=int(config.ENABLE_LIQUIDATION_ALERTS)
+        )
         state = "enabled" if config.ENABLE_LIQUIDATION_ALERTS else "disabled"
+        menu = await get_settings_menu(update.effective_chat.id)
         await update.message.reply_text(
             f"{SUCCESS_EMOJI} Liquidation alerts {state}",
-            reply_markup=get_settings_menu(),
+            reply_markup=menu,
         )
     elif text.startswith("currency"):
         options = ["usd", "eur", "btc"]
@@ -1251,9 +1283,13 @@ async def menu(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
         except ValueError:
             idx = -1
         config.VS_CURRENCY = options[(idx + 1) % len(options)]
+        await db.set_user_settings(
+            update.effective_chat.id, currency=config.VS_CURRENCY
+        )
+        menu = await get_settings_menu(update.effective_chat.id)
         await update.message.reply_text(
             f"{SUCCESS_EMOJI} Default currency set to {config.VS_CURRENCY}",
-            reply_markup=get_settings_menu(),
+            reply_markup=menu,
         )
     elif text == f"{BACK_EMOJI} Back":
         await update.message.reply_text(
