@@ -30,7 +30,22 @@ UP_ARROW = "\U0001f53a"
 DOWN_ARROW = "\U0001f53b"
 ROCKET = "\U0001f680"
 BOMB = "\U0001f4a3"
-DEFAULT_ALERT_EMOJI = ROCKET
+POSITIVE_TREND_EMOJIS = [
+    "\U0001f4c8",
+    "\U0001f929",
+    "\U0001f4aa",
+    "\U0001f680",
+    "\U0001f92f",
+    "\U0001f389",
+]
+NEGATIVE_TREND_EMOJIS = [
+    "\U0001f4c9",
+    "\U0001f61e",
+    "\U0001f4a3",
+    "\U0001f480",
+    "\u26a0\ufe0f",
+]
+DEFAULT_ALERT_EMOJI = UP_ARROW
 
 user_messages: Dict[int, Deque[float]] = defaultdict(deque)
 global_messages: Deque[float] = deque()
@@ -163,12 +178,16 @@ def milestones_crossed(last: float, current: float) -> List[float]:
 
 
 def trend_emojis(change: float) -> str:
-    """Return emojis representing the direction of ``change``."""
-    if change >= 10:
-        return f"{UP_ARROW} {ROCKET}"
-    if change <= -10:
-        return f"{DOWN_ARROW} {BOMB}"
+    """Return arrow emoji based on the sign of ``change``."""
     return UP_ARROW if change >= 0 else DOWN_ARROW
+
+
+def random_trend_suffix(change: float) -> str:
+    """Return 2-3 random emojis representing the trend direction."""
+    emojis = POSITIVE_TREND_EMOJIS if change >= 0 else NEGATIVE_TREND_EMOJIS
+    count = random.randint(2, 3)
+    chosen = random.sample(emojis, k=min(count, len(emojis)))
+    return "".join(chosen)
 
 
 def usd_value(value: Optional[object]) -> Optional[float]:
@@ -233,7 +252,11 @@ def calculate_volume_profile(candles: List[dict]) -> dict:
 
 
 async def send_rate_limited(
-    bot: Bot, chat_id: int, text: str, emoji: str = DEFAULT_ALERT_EMOJI
+    bot: Bot,
+    chat_id: int,
+    text: str,
+    emoji: str = DEFAULT_ALERT_EMOJI,
+    suffix: str = "",
 ) -> None:
     """Send a message while enforcing per-user and global rate limits."""
     now = time.time()
@@ -248,7 +271,10 @@ async def send_rate_limited(
     if len(global_messages) >= 30:
         wait = max(0, 1 - (now - global_messages[0]))
         await asyncio.sleep(wait)
-    await bot.send_message(chat_id=chat_id, text=f"{emoji} {text}")
+    message = f"{emoji} {text}"
+    if suffix:
+        message += f" {suffix}"
+    await bot.send_message(chat_id=chat_id, text=message)
     user_q.append(time.time())
     global_messages.append(time.time())
 
@@ -373,7 +399,11 @@ async def check_prices(app) -> None:
                                 f"(now ${format_price(price)})"
                             )
                             await send_rate_limited(
-                                app.bot, chat_id, msg, emoji=f"{UP_ARROW} {ROCKET}"
+                                app.bot,
+                                chat_id,
+                                msg,
+                                emoji=UP_ARROW,
+                                suffix=random_trend_suffix(price - prev),
                             )
                         else:
                             msg = (
@@ -381,7 +411,11 @@ async def check_prices(app) -> None:
                                 f"(now ${format_price(price)})"
                             )
                             await send_rate_limited(
-                                app.bot, chat_id, msg, emoji=f"{DOWN_ARROW} {BOMB}"
+                                app.bot,
+                                chat_id,
+                                msg,
+                                emoji=DOWN_ARROW,
+                                suffix=random_trend_suffix(price - prev),
                             )
                 MILESTONE_CACHE[(chat_id, coin)] = price
                 if target_price is not None and direction is not None:
@@ -395,7 +429,11 @@ async def check_prices(app) -> None:
                                 f"(now ${format_price(price)})"
                             )
                             await send_rate_limited(
-                                app.bot, chat_id, msg, emoji=f"{UP_ARROW} {ROCKET}"
+                                app.bot,
+                                chat_id,
+                                msg,
+                                emoji=UP_ARROW,
+                                suffix=random_trend_suffix(price - prev),
                             )
                         elif crossed_down:
                             msg = (
@@ -403,7 +441,11 @@ async def check_prices(app) -> None:
                                 f"(now ${format_price(price)})"
                             )
                             await send_rate_limited(
-                                app.bot, chat_id, msg, emoji=f"{DOWN_ARROW} {BOMB}"
+                                app.bot,
+                                chat_id,
+                                msg,
+                                emoji=DOWN_ARROW,
+                                suffix=random_trend_suffix(price - prev),
                             )
                 if last_ts is None or time.time() - last_ts >= interval:
                     raw_change = (price - last_price) / last_price * 100
@@ -424,7 +466,11 @@ async def check_prices(app) -> None:
                             text += f", {change_24h:+.2f}% 24h"
                         text += ")"
                         await send_rate_limited(
-                            app.bot, chat_id, text, emoji=trend_emojis(raw_change)
+                            app.bot,
+                            chat_id,
+                            text,
+                            emoji=trend_emojis(raw_change),
+                            suffix=random_trend_suffix(raw_change),
                         )
                     if settings.get("volume", config.ENABLE_VOLUME_ALERTS):
                         if (
@@ -444,6 +490,7 @@ async def check_prices(app) -> None:
                                     chat_id,
                                     msg,
                                     emoji=trend_emojis(raw_vol_change),
+                                    suffix=random_trend_suffix(raw_vol_change),
                                 )
                     await db.set_last_price(sub_id, price, volume)
 
