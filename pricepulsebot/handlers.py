@@ -455,8 +455,7 @@ async def refresh_cache(app) -> None:
         coins = [row[0] for row in await cursor.fetchall()]
         await cursor.close()
     async with aiohttp.ClientSession() as session:
-        for coin in coins:
-            await api.refresh_coin_data(coin, session=session)
+        await api.refresh_coins_data(coins, session=session)
     await api.get_global_overview(user=None)
 
 

@@ -901,3 +901,36 @@ async def refresh_coin_data(
             "chart_7d": chart,
         },
     )
+
+
+async def refresh_coins_data(
+    coins: list[str], session: Optional[aiohttp.ClientSession] = None
+) -> None:
+    """Refresh cached data for multiple ``coins`` in one batch."""
+    if not coins:
+        return
+    owns_session = session is None
+    if owns_session:
+        session = aiohttp.ClientSession()
+    try:
+        groups = [coins[i : i + 250] for i in range(0, len(coins), 250)]  # noqa: E203
+        markets: dict[str, dict] = {}
+        for group in groups:
+            markets.update(await get_markets(group, session=session, user=None))
+        for coin in coins:
+            market_info = markets.get(coin)
+            price = market_info.get("current_price") if market_info else None
+            info, _ = await get_coin_info(coin, session=session, user=None)
+            chart, _ = await get_market_chart(coin, 7, session=session, user=None)
+            await db.set_coin_data(
+                coin,
+                {
+                    "price": price,
+                    "market_info": market_info,
+                    "info": info,
+                    "chart_7d": chart,
+                },
+            )
+    finally:
+        if owns_session and session:
+            await session.close()
