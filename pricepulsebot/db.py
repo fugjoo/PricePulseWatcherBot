@@ -87,6 +87,19 @@ async def init_db() -> None:
             )
             """
         )
+        await db.execute(
+            """
+            CREATE TABLE IF NOT EXISTS user_settings (
+                chat_id INTEGER PRIMARY KEY,
+                threshold REAL,
+                interval INTEGER,
+                milestones INTEGER,
+                volume INTEGER,
+                liquidations INTEGER,
+                currency TEXT
+            )
+            """
+        )
         cursor = await db.execute("PRAGMA table_info(subscriptions)")
         rows = await cursor.fetchall()
         await cursor.close()
@@ -377,4 +390,69 @@ async def set_coin_data(coin: str, data: dict) -> None:
                 time.time(),
             ),
         )
+        await db.commit()
+
+
+async def get_user_settings(chat_id: int) -> dict:
+    """Return user-specific settings with global defaults as fallback."""
+    async with aiosqlite.connect(config.DB_FILE) as db:
+        cursor = await db.execute(
+            (
+                "SELECT threshold, interval, milestones, volume, "
+                "liquidations, currency FROM user_settings WHERE chat_id=?"
+            ),
+            (chat_id,),
+        )
+        row = await cursor.fetchone()
+        await cursor.close()
+    settings = {
+        "threshold": config.DEFAULT_THRESHOLD,
+        "interval": config.DEFAULT_INTERVAL,
+        "milestones": config.ENABLE_MILESTONE_ALERTS,
+        "volume": config.ENABLE_VOLUME_ALERTS,
+        "liquidations": config.ENABLE_LIQUIDATION_ALERTS,
+        "currency": config.VS_CURRENCY,
+    }
+    if row:
+        keys = [
+            "threshold",
+            "interval",
+            "milestones",
+            "volume",
+            "liquidations",
+            "currency",
+        ]
+        for key, value in zip(keys, row):
+            if value is not None:
+                if key in {"milestones", "volume", "liquidations"}:
+                    settings[key] = bool(value)
+                else:
+                    settings[key] = value
+    return settings
+
+
+async def set_user_settings(chat_id: int, **kwargs) -> None:
+    """Update one or more settings for ``chat_id``."""
+    if not kwargs:
+        return
+    async with aiosqlite.connect(config.DB_FILE) as db:
+        cursor = await db.execute(
+            "SELECT chat_id FROM user_settings WHERE chat_id=?",
+            (chat_id,),
+        )
+        exists = await cursor.fetchone()
+        await cursor.close()
+        if exists:
+            sets = ", ".join(f"{k}=?" for k in kwargs)
+            await db.execute(
+                f"UPDATE user_settings SET {sets} WHERE chat_id=?",
+                (*kwargs.values(), chat_id),
+            )
+        else:
+            cols = ", ".join(["chat_id", *kwargs.keys()])
+            placeholders = ", ".join("?" for _ in range(len(kwargs) + 1))
+            await db.execute(
+                f"INSERT INTO user_settings ({cols}) VALUES ({placeholders})",
+                (chat_id, *kwargs.values()),
+            )
         await db.commit()
