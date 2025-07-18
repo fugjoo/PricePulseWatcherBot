@@ -552,7 +552,7 @@ async def help_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
             lines.append(f"/{name} - {desc}")
     lines.append("Intervals can be like 1h, 15m or 30s")
     await update.message.reply_text(
-        f"{INFO_EMOJI} Help\n" + "\n".join(lines), reply_markup=get_keyboard()
+        f"{INFO_EMOJI} Commands\n" + "\n".join(lines), reply_markup=get_keyboard()
     )
 
 
