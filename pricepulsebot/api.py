@@ -885,8 +885,8 @@ async def refresh_coin_data(
     if owns_session:
         session = aiohttp.ClientSession()
     try:
-        price = await get_price(coin, session=session, user=None)
         market_info = await get_market_info(coin, session=session, user=None)
+        price = market_info.get("current_price") if market_info else None
         info, _ = await get_coin_info(coin, session=session, user=None)
         chart, _ = await get_market_chart(coin, 7, session=session, user=None)
     finally:
