@@ -943,6 +943,7 @@ async def news_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
             return
 
     async with aiohttp.ClientSession() as session:
+        seen: set[str] = set()
         for coin in coins:
             items = await api.get_news(
                 coin, session=session, user=update.effective_chat.id
@@ -952,9 +953,21 @@ async def news_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
                     f"{ERROR_EMOJI} No news for {api.symbol_for(coin)}"
                 )
                 continue
-            lines = [f"- {i.get('title')}" for i in items[:5]]
-            text = f"{INFO_EMOJI} News for {api.symbol_for(coin)}:\n" + "\n".join(lines)
-            await update.message.reply_text(text)
+            for item in items[:5]:
+                url = item.get("url")
+                title = item.get("title")
+                if not title:
+                    continue
+                if not context.args and url in seen:
+                    continue
+                if url:
+                    seen.add(url)
+                    text = f'{INFO_EMOJI} <a href="{url}">{title}</a>'
+                else:
+                    text = f"{INFO_EMOJI} {title}"
+                await update.message.reply_text(
+                    text, parse_mode="HTML", disable_web_page_preview=True
+                )
 
 
 async def valuearea_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
