@@ -558,7 +558,11 @@ async def help_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
 
 
 async def subscribe_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
-    """Subscribe the chat to price alerts for a coin."""
+    """Subscribe the chat to price alerts for a coin.
+
+    The second argument can be a percent change or an absolute price
+    prefixed with ``>`` or ``<`` to alert when that value is crossed.
+    """
     if not context.args:
         await update.message.reply_text(
             f"{ERROR_EMOJI} Usage: /add <coin> [pct] [interval]"

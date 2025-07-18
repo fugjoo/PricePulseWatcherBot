@@ -62,7 +62,8 @@ Create a `.env` file from the example. It holds credentials and runtime options:
 
 ### Commands
 
-- `/add <coin> [pct] [interval]` – subscribe to price alerts
+ - `/add <coin> [pct|>price|<price] [interval]` – subscribe to price alerts
+   (use `>price` or `<price` to trigger when the value is crossed)
 - `/remove <coin>` – remove a subscription
 - `/clear` – remove all subscriptions
 - `/list` – list active subscriptions
