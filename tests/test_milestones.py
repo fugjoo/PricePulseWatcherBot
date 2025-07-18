@@ -31,6 +31,11 @@ def test_format_price_small_value():
     assert format_price(3.7e-05) == "0.000037"
 
 
+def test_format_price_removes_artifacts():
+    value = 0.00013000000000000002
+    assert format_price(value) == "0.00013"
+
+
 def test_milestone_message_format():
     level = 0.6
     price = 0.65
