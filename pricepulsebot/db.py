@@ -1,6 +1,7 @@
 """Asynchronous SQLite helpers for caching coin data and subscriptions."""
 
 import json
+import os
 import time
 from typing import List, Optional, Tuple
 
@@ -456,3 +457,13 @@ async def set_user_settings(chat_id: int, **kwargs) -> None:
                 (chat_id, *kwargs.values()),
             )
         await db.commit()
+
+
+async def get_db_stats() -> Tuple[int, int]:
+    """Return subscription count and file size in bytes."""
+    async with aiosqlite.connect(config.DB_FILE) as db:
+        cursor = await db.execute("SELECT COUNT(*) FROM subscriptions")
+        count_row = await cursor.fetchone()
+        await cursor.close()
+    size = os.path.getsize(config.DB_FILE) if os.path.exists(config.DB_FILE) else 0
+    return (count_row[0], size)
