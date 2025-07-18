@@ -55,6 +55,13 @@ def encoded(coin: str) -> str:
     return quote(coin, safe="-")
 
 
+def _is_usdt(item: dict) -> bool:
+    """Return ``True`` if *item* represents USDT/Tether."""
+    coin_id = str(item.get("id", "")).lower()
+    symbol = str(item.get("symbol", "")).lower()
+    return coin_id == "tether" or symbol == "usdt"
+
+
 async def resolve_pair(
     value: str, quote: str = "USDT", *, user: Optional[int] = None
 ) -> str:
@@ -711,6 +718,7 @@ async def fetch_trending_coins() -> Optional[list[dict]]:
             if coin_id and symbol:
                 config.COIN_SYMBOLS[coin_id] = symbol.upper()
                 config.SYMBOL_TO_COIN[symbol.lower()] = coin_id
+        cached = [c for c in cached if not _is_usdt(c)]
         config.COINS = [c.get("id") for c in cached if c.get("id")]
         cached.sort(key=lambda x: (x["change_24h"] is None, -(x["change_24h"] or 0)))
         return cached
@@ -730,6 +738,8 @@ async def fetch_trending_coins() -> Optional[list[dict]]:
                 symbol = item.get("symbol")
                 name = item.get("name")
                 if not coin_id:
+                    continue
+                if coin_id == "tether" or (symbol and symbol.lower() == "usdt"):
                     continue
                 ids.append(coin_id)
                 infos.append((coin_id, symbol, name))
@@ -783,6 +793,7 @@ async def fetch_trending_coins() -> Optional[list[dict]]:
             if coin_id and symbol:
                 config.COIN_SYMBOLS[coin_id] = symbol.upper()
                 config.SYMBOL_TO_COIN[symbol.lower()] = coin_id
+        cached = [c for c in cached if not _is_usdt(c)]
         config.COINS = [c.get("id") for c in cached if c.get("id")]
         cached.sort(key=lambda x: (x["change_24h"] is None, -(x["change_24h"] or 0)))
         return cached
@@ -811,6 +822,8 @@ async def fetch_top_coins(per_page: int = 100) -> Optional[list[dict]]:
                 coin_id = item.get("id")
                 symbol = item.get("symbol")
                 if not coin_id:
+                    continue
+                if coin_id == "tether" or (symbol and symbol.lower() == "usdt"):
                     continue
                 coins.append(coin_id)
                 if symbol:
