@@ -548,7 +548,6 @@ async def help_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     """Display available commands and usage information."""
     lines: list[str] = []
     for category, commands in COMMAND_CATEGORIES.items():
-        lines.append(f"{category}:")
         for name, desc in commands:
             lines.append(f"/{name} - {desc}")
     lines.append("Intervals can be like 1h, 15m or 30s")
