@@ -62,6 +62,7 @@ COMMAND_CATEGORIES: dict[str, list[tuple[str, str]]] = {
         ("chart", "Price chart"),
         ("news", "Latest news"),
         ("trends", "Trending coins"),
+        ("top", "Top market cap"),
         ("global", "Global market"),
         ("feargreed", "Market sentiment"),
         ("valuearea", "Volume profile"),
@@ -899,6 +900,32 @@ async def trends_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None
             line += f" ({change_24h:+.2f}% 24h)"
         lines.append(line)
     text = f"{INFO_EMOJI} Trending coins:\n" + "\n".join(lines)
+    await update.message.reply_text(text)
+
+
+async def top_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    """Display the top market cap coins."""
+    data = await api.fetch_top_coins()
+    if not data:
+        await update.message.reply_text(f"{ERROR_EMOJI} Failed to fetch data")
+        return
+    lines = []
+    for item in data[:10]:
+        coin_id = item.get("id")
+        symbol = item.get("symbol") or api.symbol_for(coin_id)
+        price = item.get("price")
+        change_24h = item.get("change_24h")
+
+        line = symbol.upper()
+        if change_24h is not None:
+            arrow = UP_ARROW if change_24h >= 0 else DOWN_ARROW
+            line = f"{arrow} {line}"
+        if price is not None:
+            line += f" ${format_price(price)}"
+        if change_24h is not None:
+            line += f" ({change_24h:+.2f}% 24h)"
+        lines.append(line)
+    text = f"{INFO_EMOJI} Top coins:\n" + "\n".join(lines)
     await update.message.reply_text(text)
 
 

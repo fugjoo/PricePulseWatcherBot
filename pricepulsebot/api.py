@@ -789,11 +789,12 @@ async def fetch_trending_coins() -> Optional[list[dict]]:
     return None
 
 
-async def fetch_top_coins() -> None:
-    """Update :data:`config.TOP_COINS` with high market cap coins."""
+async def fetch_top_coins(per_page: int = 100) -> Optional[list[dict]]:
+    """Return the top market cap coins and update :data:`config.TOP_COINS`."""
     url = (
         f"{config.COINGECKO_BASE_URL}/coins/markets"
-        f"?vs_currency={config.VS_CURRENCY}&order=market_cap_desc&per_page=50&page=1"
+        f"?vs_currency={config.VS_CURRENCY}&order=market_cap_desc"
+        f"&per_page={per_page}&page=1&price_change_percentage=24h"
     )
     try:
         async with aiohttp.ClientSession() as session:
@@ -802,20 +803,32 @@ async def fetch_top_coins() -> None:
                 config.logger.warning(
                     "top coins request failed: %s", getattr(resp, "status", "n/a")
                 )
-                return
+                return None
             data = await resp.json()
             coins: list[str] = []
-            for item in data[:20]:
+            result: list[dict] = []
+            for item in data:
                 coin_id = item.get("id")
                 symbol = item.get("symbol")
-                if coin_id:
-                    coins.append(coin_id)
-                    if symbol:
-                        config.COIN_SYMBOLS[coin_id] = symbol.upper()
-                        config.SYMBOL_TO_COIN[symbol.lower()] = coin_id
+                if not coin_id:
+                    continue
+                coins.append(coin_id)
+                if symbol:
+                    config.COIN_SYMBOLS[coin_id] = symbol.upper()
+                    config.SYMBOL_TO_COIN[symbol.lower()] = coin_id
+                result.append(
+                    {
+                        "id": coin_id,
+                        "symbol": symbol,
+                        "price": item.get("current_price"),
+                        "change_24h": item.get("price_change_percentage_24h"),
+                    }
+                )
             config.TOP_COINS = coins
+            return result
     except aiohttp.ClientError as exc:
         config.logger.error("error fetching top coins: %s", exc)
+    return None
 
 
 async def get_news(

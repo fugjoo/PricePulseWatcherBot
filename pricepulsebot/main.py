@@ -39,6 +39,7 @@ async def main() -> None:
     app.add_handler(CommandHandler("chart", handlers.chart_cmd))
     app.add_handler(CommandHandler("news", handlers.news_cmd))
     app.add_handler(CommandHandler("trends", handlers.trends_cmd))
+    app.add_handler(CommandHandler("top", handlers.top_cmd))
     app.add_handler(CommandHandler("global", handlers.global_cmd))
     app.add_handler(CommandHandler(["feargreed", "sentiment"], handlers.feargreed_cmd))
     app.add_handler(CommandHandler("status", handlers.status_cmd))

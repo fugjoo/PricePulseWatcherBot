@@ -70,6 +70,7 @@ Create a `.env` file from the example. It holds credentials and runtime options:
 - `/chart <coin> [days]` – plot price history (alias `/charts`)
 - `/news [coin]` – show latest news (uses subscriptions when omitted)
 - `/trends` – show trending coins
+- `/top` – show top market cap coins
 - `/global` – show global market stats
 - `/feargreed` – show daily market sentiment
 - `/status` – display API status overview
