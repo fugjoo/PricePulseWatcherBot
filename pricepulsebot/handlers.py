@@ -806,7 +806,7 @@ async def info_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
 async def chart_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     """Send a price chart image for a coin."""
     if not context.args:
-        await update.message.reply_text(f"{ERROR_EMOJI} Usage: /chart <coin> [days]")
+        await update.message.reply_text(f"{ERROR_EMOJI} Usage: /chart <coin> [period]")
         return
     coin_input = context.args[0]
     coin = await api.resolve_coin(coin_input, user=update.effective_chat.id)
@@ -818,13 +818,16 @@ async def chart_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
             msg += f". Did you mean {syms}?"
         await update.message.reply_text(msg)
         return
-    days = 7
+    seconds = 86400
     if len(context.args) > 1:
         try:
-            days = int(context.args[1])
+            seconds = config.parse_timeframe(context.args[1])
         except ValueError:
-            await update.message.reply_text(f"{ERROR_EMOJI} Days must be a number")
+            await update.message.reply_text(
+                f"{ERROR_EMOJI} Period must be a number or like 1h, 30m"
+            )
             return
+    days = seconds / 86400
     cached = await db.get_coin_data(coin)
     if days == 7 and cached and cached.get("chart_7d") is not None:
         data = [(p[0], p[1]) for p in cached["chart_7d"]]
@@ -847,7 +850,7 @@ async def chart_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     ax.xaxis.set_major_locator(mdates.AutoDateLocator())
     ax.xaxis.set_major_formatter(mdates.DateFormatter("%b %d"))
     plt.xlabel("Date")
-    plt.title(f"{coin.upper()} last {days} days")
+    plt.title(f"{coin.upper()} last {config.format_interval(seconds)}")
     plt.tight_layout()
     buf = BytesIO()
     plt.savefig(buf, format="png")
