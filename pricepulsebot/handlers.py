@@ -848,8 +848,12 @@ async def chart_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     plt.plot(times, prices)
     ax = plt.gca()
     ax.xaxis.set_major_locator(mdates.AutoDateLocator())
-    ax.xaxis.set_major_formatter(mdates.DateFormatter("%b %d"))
-    plt.xlabel("Date")
+    if seconds <= 172800:
+        ax.xaxis.set_major_formatter(mdates.DateFormatter("%H:%M"))
+        plt.xlabel("Time")
+    else:
+        ax.xaxis.set_major_formatter(mdates.DateFormatter("%b %d"))
+        plt.xlabel("Date")
     plt.title(f"{coin.upper()} last {config.format_interval(seconds)}")
     plt.tight_layout()
     buf = BytesIO()
