@@ -65,7 +65,7 @@ Create a `.env` file from the example. It holds credentials and runtime options:
 - `/clear` – remove all subscriptions
 - `/list` – list active subscriptions
 - `/info <coin>` – show current coin data
-- `/chart <coin> [days]` – plot price history (alias `/charts`)
+ - `/chart <coin> [period]` – plot price history for a timeframe (alias `/charts`)
 - `/news [coin]` – show latest news (uses subscriptions when omitted)
 - `/trends` – show trending coins
 - `/top` – show top market cap coins
@@ -76,6 +76,7 @@ Create a `.env` file from the example. It holds credentials and runtime options:
   interval, milestones, volume, currency)
 
 Intervals accept plain seconds or values like `1h`, `15m` or `30s`.
+Periods default to days but accept suffixes like `h` or `m`.
 
 ### One‑click install
 
