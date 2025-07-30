@@ -80,6 +80,7 @@ COMMAND_CATEGORIES: dict[str, list[tuple[str, str]]] = {
     "Info & Tools": [
         ("info", "Coin information"),
         ("chart", "Price chart"),
+        ("charts", "All coin charts"),
         ("news", "Latest news"),
         ("trends", "Trending coins"),
         ("top", "Top market cap"),
@@ -803,6 +804,50 @@ async def info_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     await update.message.reply_text(text)
 
 
+async def _send_chart(
+    context: ContextTypes.DEFAULT_TYPE,
+    chat_id: int,
+    coin: str,
+    seconds: int,
+) -> None:
+    """Send a price chart for ``coin`` to ``chat_id``."""
+    days = seconds / 86400
+    cached = await db.get_coin_data(coin)
+    if days == 7 and cached and cached.get("chart_7d") is not None:
+        data = [(p[0], p[1]) for p in cached["chart_7d"]]
+        err = None
+    else:
+        data, err = await api.get_market_chart(coin, days, user=chat_id)
+    if err:
+        await context.bot.send_message(chat_id, f"{ERROR_EMOJI} {err}")
+        return
+    if not data:
+        await context.bot.send_message(
+            chat_id,
+            f"{ERROR_EMOJI} No data available for {api.symbol_for(coin)}",
+        )
+        return
+    times, prices = zip(*data)
+    times = [datetime.fromtimestamp(t) for t in times]
+    plt.figure(figsize=(6, 3))
+    plt.plot(times, prices)
+    ax = plt.gca()
+    ax.xaxis.set_major_locator(mdates.AutoDateLocator())
+    if seconds <= 172800:
+        ax.xaxis.set_major_formatter(mdates.DateFormatter("%H:%M"))
+        plt.xlabel("Time")
+    else:
+        ax.xaxis.set_major_formatter(mdates.DateFormatter("%b %d"))
+        plt.xlabel("Date")
+    plt.title(f"{coin.upper()} last {config.format_interval(seconds)}")
+    plt.tight_layout()
+    buf = BytesIO()
+    plt.savefig(buf, format="png")
+    plt.close()
+    buf.seek(0)
+    await context.bot.send_photo(chat_id, buf)
+
+
 async def chart_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     """Send a price chart image for a coin."""
     if not context.args:
@@ -827,40 +872,27 @@ async def chart_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
                 f"{ERROR_EMOJI} Period must be a number or like 1h, 30m"
             )
             return
-    days = seconds / 86400
-    cached = await db.get_coin_data(coin)
-    if days == 7 and cached and cached.get("chart_7d") is not None:
-        data = [(p[0], p[1]) for p in cached["chart_7d"]]
-        err = None
-    else:
-        data, err = await api.get_market_chart(
-            coin, days, user=update.effective_chat.id
-        )
-    if err:
-        await update.message.reply_text(f"{ERROR_EMOJI} {err}")
+    await _send_chart(context, update.effective_chat.id, coin, seconds)
+
+
+async def charts_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    """Send price charts for all subscribed coins."""
+    subs = await db.list_subscriptions(update.effective_chat.id)
+    coins = [coin for _, coin, *_ in subs]
+    if not coins:
+        await update.message.reply_text(f"{INFO_EMOJI} No subscriptions")
         return
-    if not data:
-        await update.message.reply_text(f"{ERROR_EMOJI} No data available")
-        return
-    times, prices = zip(*data)
-    times = [datetime.fromtimestamp(t) for t in times]
-    plt.figure(figsize=(6, 3))
-    plt.plot(times, prices)
-    ax = plt.gca()
-    ax.xaxis.set_major_locator(mdates.AutoDateLocator())
-    if seconds <= 172800:
-        ax.xaxis.set_major_formatter(mdates.DateFormatter("%H:%M"))
-        plt.xlabel("Time")
-    else:
-        ax.xaxis.set_major_formatter(mdates.DateFormatter("%b %d"))
-        plt.xlabel("Date")
-    plt.title(f"{coin.upper()} last {config.format_interval(seconds)}")
-    plt.tight_layout()
-    buf = BytesIO()
-    plt.savefig(buf, format="png")
-    plt.close()
-    buf.seek(0)
-    await context.bot.send_photo(update.effective_chat.id, buf)
+    seconds = 86400
+    if context.args:
+        try:
+            seconds = config.parse_timeframe(context.args[0])
+        except ValueError:
+            await update.message.reply_text(
+                f"{ERROR_EMOJI} Period must be a number or like 1h, 30m"
+            )
+            return
+    for coin in coins:
+        await _send_chart(context, update.effective_chat.id, coin, seconds)
 
 
 async def global_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
