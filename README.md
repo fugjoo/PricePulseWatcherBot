@@ -65,7 +65,8 @@ Create a `.env` file from the example. It holds credentials and runtime options:
 - `/clear` – remove all subscriptions
 - `/list` – list active subscriptions
 - `/info <coin>` – show current coin data
- - `/chart <coin> [period]` – plot price history for a timeframe (alias `/charts`)
+- `/chart <coin> [period]` – plot price history for a timeframe
+- `/charts [period]` – plot price history for all subscriptions
 - `/news [coin]` – show latest news (uses subscriptions when omitted)
 - `/trends` – show trending coins
 - `/top` – show top market cap coins
