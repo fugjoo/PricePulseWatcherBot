@@ -38,7 +38,7 @@ async def test_refresh_coin_data_populates_table(tmp_path, monkeypatch):
     async def fake_coin_info(coin, session=None, user=None):
         return {"id": coin}, None
 
-    async def fake_chart(coin, days, session=None, user=None):
+    async def fake_chart(coin, days, session=None, user=None, force=False):
         return [(1, 2)], None
 
     monkeypatch.setattr(api, "get_price", fake_price)
