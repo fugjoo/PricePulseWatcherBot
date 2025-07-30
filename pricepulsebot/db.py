@@ -278,7 +278,7 @@ async def set_coin_info(coin: str, data: dict) -> None:
 
 
 async def get_coin_chart(coin: str, days: int) -> Optional[list]:
-    """Return cached chart data for ``coin`` if available."""
+    """Return cached chart data for ``coin`` if available and fresh."""
     async with aiosqlite.connect(config.DB_FILE) as db:
         cursor = await db.execute(
             "SELECT data, fetched_at FROM coin_charts WHERE coin_id=? AND days=?",
@@ -287,7 +287,9 @@ async def get_coin_chart(coin: str, days: int) -> Optional[list]:
         row = await cursor.fetchone()
         await cursor.close()
     if row:
-        return json.loads(row[0])
+        data, ts = row
+        if time.time() - ts < config.CHART_CACHE_TTL:
+            return json.loads(data)
     return None
 
 

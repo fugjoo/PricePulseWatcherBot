@@ -809,6 +809,8 @@ async def _send_chart(
     chat_id: int,
     coin: str,
     seconds: int,
+    *,
+    force: bool = False,
 ) -> None:
     """Send a price chart for ``coin`` to ``chat_id``."""
     days = seconds / 86400
@@ -817,7 +819,7 @@ async def _send_chart(
         data = [(p[0], p[1]) for p in cached["chart_7d"]]
         err = None
     else:
-        data, err = await api.get_market_chart(coin, days, user=chat_id)
+        data, err = await api.get_market_chart(coin, days, user=chat_id, force=force)
     if err:
         await context.bot.send_message(chat_id, f"{ERROR_EMOJI} {err}")
         return
@@ -845,7 +847,21 @@ async def _send_chart(
     plt.savefig(buf, format="png")
     plt.close()
     buf.seek(0)
-    await context.bot.send_photo(chat_id, buf)
+    keyboard = InlineKeyboardMarkup(
+        [
+            [
+                InlineKeyboardButton(
+                    "Reload",
+                    callback_data=f"chart:{coin}:{seconds}:reload",
+                ),
+                InlineKeyboardButton("1h", callback_data=f"chart:{coin}:3600"),
+                InlineKeyboardButton("4h", callback_data=f"chart:{coin}:14400"),
+                InlineKeyboardButton("1d", callback_data=f"chart:{coin}:86400"),
+                InlineKeyboardButton("3d", callback_data=f"chart:{coin}:259200"),
+            ]
+        ]
+    )
+    await context.bot.send_photo(chat_id, buf, reply_markup=keyboard)
 
 
 async def chart_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
@@ -1241,6 +1257,19 @@ async def button(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
             text=f"{INFO_EMOJI} Use /add {coin} [pct] [interval] to update",
         )
         await query.edit_message_reply_markup(reply_markup=None)
+    elif query.data.startswith("chart:"):
+        parts = query.data.split(":")
+        coin = parts[1]
+        seconds = int(parts[2])
+        force = len(parts) > 3 and parts[3] == "reload"
+        await query.message.delete()
+        await _send_chart(
+            context,
+            query.message.chat_id,
+            coin,
+            seconds,
+            force=force,
+        )
     elif query.data.startswith("settings:"):
         key = query.data.split(":", 1)[1]
         text = ""

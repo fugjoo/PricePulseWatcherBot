@@ -521,6 +521,7 @@ async def get_market_chart(
     session: Optional[aiohttp.ClientSession] = None,
     *,
     user: Optional[int] = None,
+    force: bool = False,
 ) -> tuple[Optional[list[tuple[float, float]]], Optional[str]]:
     """Return historical price data for ``coin``.
 
@@ -540,7 +541,7 @@ async def get_market_chart(
     tuple[list[tuple[float, float]] | None, str | None]
         List of ``(timestamp, price)`` tuples or an error message.
     """
-    cached = await db.get_coin_chart(coin, days)
+    cached = None if force else await db.get_coin_chart(coin, days)
     if cached is not None:
         return [(p[0], p[1]) for p in cached], None
     end_ts = int(time.time())
