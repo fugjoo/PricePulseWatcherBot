@@ -26,6 +26,18 @@ def parse_duration(value: str) -> int:
     return int(num) * factor
 
 
+def parse_timeframe(value: str) -> int:
+    """Return seconds for a timeframe string.
+
+    Pure numbers are interpreted as days while values with a trailing unit are
+    delegated to :func:`parse_duration` to support hours or minutes.
+    """
+
+    if value.isdigit():
+        return int(value) * 86400
+    return parse_duration(value)
+
+
 def format_interval(seconds: int) -> str:
     """Return a short string representation for a duration in seconds."""
     if seconds % 86400 == 0:
