@@ -13,17 +13,24 @@ cd "$ROOT_DIR"
 PYTHON=${PYTHON:-python3}
 if ! command -v "$PYTHON" >/dev/null 2>&1; then
 
+    echo "Python 3.8+ not found."
+    cat <<'WARN'
+This script will attempt to install system packages using sudo.
+Running commands as root can modify your system and may be a security risk.
+If you prefer a manual setup, install Python 3.8+ yourself and rerun this script.
+WARN
+
     if command -v apt-get >/dev/null 2>&1; then
-        echo "Python 3.8+ not found. Installing python3.8..."
+        echo "Installing python3.8 via apt-get..."
         sudo apt-get update
         sudo apt-get install -y python3.8 python3.8-venv
         PYTHON=python3.8
     elif command -v yum >/dev/null 2>&1; then
-        echo "Python 3.8+ not found. Installing python3 via yum..."
+        echo "Installing python3 via yum..."
         sudo yum install -y python3
         PYTHON=python3
     elif command -v dnf >/dev/null 2>&1; then
-        echo "Python 3.8+ not found. Installing python3 via dnf..."
+        echo "Installing python3 via dnf..."
         sudo dnf install -y python3
         PYTHON=python3
     else
