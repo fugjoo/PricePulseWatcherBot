@@ -86,6 +86,10 @@ Run the provided script to set up a virtual environment automatically:
 ./install.sh
 ```
 
+The script may ask for `sudo` to install system packages. If you do not have
+root access, make sure Python 3.8+ is installed manually and create the
+virtual environment using the steps in [Quickstart](#quickstart).
+
 ## Contributing
 
 Activate your virtual environment and run the following checks before opening a pull request:
