@@ -2,6 +2,7 @@
 
 import asyncio
 import random
+import textwrap
 import time
 from collections import defaultdict, deque
 from datetime import datetime
@@ -13,8 +14,14 @@ import aiohttp
 import numpy as np
 from matplotlib import dates as mdates
 from matplotlib import pyplot as plt
-from telegram import (Bot, InlineKeyboardButton, InlineKeyboardMarkup,
-                      KeyboardButton, ReplyKeyboardMarkup, Update)
+from telegram import (
+    Bot,
+    InlineKeyboardButton,
+    InlineKeyboardMarkup,
+    KeyboardButton,
+    ReplyKeyboardMarkup,
+    Update,
+)
 from telegram.constants import ChatAction
 from telegram.ext import ContextTypes
 
@@ -125,7 +132,8 @@ def format_coin_text(
         text += "\n"
     if cap is not None:
         text += f"Cap: ${cap:,.0f}"
-    return text
+    lines = [textwrap.fill(line, width=40) for line in text.split("\n")]
+    return "\n".join(lines)
 
 
 def milestone_step(price: float) -> float:
@@ -758,7 +766,6 @@ async def list_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
         keyboard = InlineKeyboardMarkup(
             [
                 [
-                    InlineKeyboardButton(REMOVE_EMOJI, callback_data=f"del:{coin}"),
                     InlineKeyboardButton(
                         f"threshold: ±{threshold}%", callback_data=f"thr:{coin}"
                     ),
@@ -766,7 +773,8 @@ async def list_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
                         f"interval: {config.format_interval(interval)}",
                         callback_data=f"int:{coin}",
                     ),
-                ]
+                ],
+                [InlineKeyboardButton(REMOVE_EMOJI, callback_data=f"del:{coin}")],
             ]
         )
         await update.message.reply_text(text, reply_markup=keyboard)
@@ -1307,7 +1315,6 @@ async def button(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
         keyboard = InlineKeyboardMarkup(
             [
                 [
-                    InlineKeyboardButton(REMOVE_EMOJI, callback_data=f"del:{coin}"),
                     InlineKeyboardButton(
                         f"threshold: ±{new_th}%", callback_data=f"thr:{coin}"
                     ),
@@ -1315,7 +1322,8 @@ async def button(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
                         f"interval: {config.format_interval(iv)}",
                         callback_data=f"int:{coin}",
                     ),
-                ]
+                ],
+                [InlineKeyboardButton(REMOVE_EMOJI, callback_data=f"del:{coin}")],
             ]
         )
         entries = await build_sub_entries(query.message.chat_id)
@@ -1343,7 +1351,6 @@ async def button(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
         keyboard = InlineKeyboardMarkup(
             [
                 [
-                    InlineKeyboardButton(REMOVE_EMOJI, callback_data=f"del:{coin}"),
                     InlineKeyboardButton(
                         f"threshold: ±{threshold}%", callback_data=f"thr:{coin}"
                     ),
@@ -1351,7 +1358,8 @@ async def button(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
                         f"interval: {config.format_interval(new_int)}",
                         callback_data=f"int:{coin}",
                     ),
-                ]
+                ],
+                [InlineKeyboardButton(REMOVE_EMOJI, callback_data=f"del:{coin}")],
             ]
         )
         entries = await build_sub_entries(query.message.chat_id)
@@ -1433,20 +1441,24 @@ async def button(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
                     [
                         [
                             InlineKeyboardButton(
-                                REMOVE_EMOJI, callback_data=f"del:{coin}"
-                            ),
-                            InlineKeyboardButton(
                                 f"threshold: ±{threshold}%", callback_data=f"thr:{coin}"
                             ),
                             InlineKeyboardButton(
                                 f"interval: {config.format_interval(interval)}",
                                 callback_data=f"int:{coin}",
                             ),
-                        ]
+                        ],
+                        [
+                            InlineKeyboardButton(
+                                REMOVE_EMOJI, callback_data=f"del:{coin}"
+                            )
+                        ],
                     ]
                 )
                 await context.bot.send_message(
-                    chat_id=query.message.chat_id, text=text, reply_markup=keyboard
+                    chat_id=query.message.chat_id,
+                    text=text,
+                    reply_markup=keyboard,
                 )
         await query.edit_message_reply_markup(reply_markup=get_keyboard())
 
