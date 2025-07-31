@@ -78,3 +78,22 @@ async def test_news_cmd_dedup_and_links(tmp_path, monkeypatch):
     assert len(update.message.texts) == 1
     assert "https://example.com" in update.message.texts[0]
     assert "Hello" in update.message.texts[0]
+
+
+@pytest.mark.asyncio
+async def test_news_cmd_escapes_html(tmp_path, monkeypatch):
+    config.DB_FILE = str(tmp_path / "subs.db")
+    await db.init_db()
+    await db.subscribe_coin(1, "bitcoin", 1.0, 60)
+
+    async def fake_news(coin, session=None, user=None):
+        return [{"title": "<b>Hello</b>"}]
+
+    monkeypatch.setattr(api, "get_news", fake_news)
+
+    update = DummyUpdate()
+    ctx = DummyContext([])
+    await handlers.news_cmd(update, ctx)
+    assert update.message.texts
+    assert "<b>" not in update.message.texts[0]
+    assert "&lt;b&gt;Hello&lt;/b&gt;" in update.message.texts[0]

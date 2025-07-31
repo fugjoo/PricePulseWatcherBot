@@ -13,14 +13,8 @@ import aiohttp
 import numpy as np
 from matplotlib import dates as mdates
 from matplotlib import pyplot as plt
-from telegram import (
-    Bot,
-    InlineKeyboardButton,
-    InlineKeyboardMarkup,
-    KeyboardButton,
-    ReplyKeyboardMarkup,
-    Update,
-)
+from telegram import (Bot, InlineKeyboardButton, InlineKeyboardMarkup,
+                      KeyboardButton, ReplyKeyboardMarkup, Update)
 from telegram.constants import ChatAction
 from telegram.ext import ContextTypes
 
@@ -1083,6 +1077,7 @@ async def news_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
                 title = item.get("title")
                 if not title:
                     continue
+                title = html.escape(title)
                 if not context.args and url in seen:
                     continue
                 if url:
@@ -1093,6 +1088,9 @@ async def news_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
                 await update.message.reply_text(
                     text, parse_mode="HTML", disable_web_page_preview=True
                 )
+
+
+import html  # noqa: E402
 
 
 async def valuearea_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
