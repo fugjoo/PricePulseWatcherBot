@@ -96,3 +96,22 @@ async def test_settings_menu_deletechart_toggle():
     assert config.DELETE_CHART_ON_RELOAD != prev
     assert isinstance(update.message.markups[-1], ReplyKeyboardMarkup)
     config.DELETE_CHART_ON_RELOAD = prev
+
+
+@pytest.mark.asyncio
+async def test_settings_menu_overview_toggle():
+    prev = config.DEFAULT_OVERVIEW
+    update = DummyUpdate(SETTINGS_EMOJI)
+    ctx = DummyContext()
+    await handlers.menu(update, ctx)
+    assert any(
+        "overview" in btn.text
+        for row in update.message.markups[-1].keyboard
+        for btn in row
+    )
+
+    update.message.text = f"overview: {prev}"
+    await handlers.menu(update, ctx)
+    assert config.DEFAULT_OVERVIEW != prev
+    assert isinstance(update.message.markups[-1], ReplyKeyboardMarkup)
+    config.DEFAULT_OVERVIEW = prev

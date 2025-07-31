@@ -63,6 +63,24 @@ async def main() -> None:
         seconds=config.PRICE_CHECK_INTERVAL,
         args=(app,),
     )
+    scheduler.add_job(
+        handlers.daily_overview,
+        "cron",
+        hour=8,
+        args=(app, "morning"),
+    )
+    scheduler.add_job(
+        handlers.daily_overview,
+        "cron",
+        hour=12,
+        args=(app, "midday"),
+    )
+    scheduler.add_job(
+        handlers.daily_overview,
+        "cron",
+        hour=18,
+        args=(app, "evening"),
+    )
     scheduler.add_job(api.fetch_trending_coins, "interval", minutes=10)
     scheduler.add_job(api.fetch_top_coins, "interval", minutes=10)
     scheduler.start()

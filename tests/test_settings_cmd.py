@@ -173,3 +173,27 @@ async def test_settings_button_toggle_deletechart():
     assert isinstance(query.reply_markup, InlineKeyboardMarkup)
     assert bot.sent
     config.DELETE_CHART_ON_RELOAD = prev
+
+
+@pytest.mark.asyncio
+async def test_settings_update_overview():
+    update = DummyUpdate()
+    ctx = DummyContext(["overview", "morning"])
+    prev = config.DEFAULT_OVERVIEW
+    await handlers.settings_cmd(update, ctx)
+    assert config.DEFAULT_OVERVIEW == "morning"
+    config.DEFAULT_OVERVIEW = prev
+
+
+@pytest.mark.asyncio
+async def test_settings_button_toggle_overview():
+    bot = DummyBot()
+    query = DummyCallbackQuery("settings:overview")
+    update = DummyCallbackUpdate(query)
+    ctx = DummyContext([], bot)
+    prev = config.DEFAULT_OVERVIEW
+    await handlers.button(update, ctx)
+    assert config.DEFAULT_OVERVIEW != prev
+    assert isinstance(query.reply_markup, InlineKeyboardMarkup)
+    assert bot.sent
+    config.DEFAULT_OVERVIEW = prev

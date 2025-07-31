@@ -516,6 +516,102 @@ async def refresh_cache(app) -> None:
     await api.get_global_overview(user=None)
 
 
+async def daily_overview(app, period: str) -> None:
+    """Send market overview to chats configured for ``period``."""
+    chat_ids = await db.get_overview_chats(period)
+    if not chat_ids:
+        return
+    global_data, _ = await api.get_global_overview(user=None)
+    top = await api.fetch_top_coins()
+    trends = await api.fetch_trending_coins()
+    fear, _ = await api.get_feargreed_index(user=None)
+    for chat_id in chat_ids:
+        if global_data:
+            info = global_data.get("data", {})
+            cap = info.get("total_market_cap", {}).get(config.VS_CURRENCY)
+            volume = info.get("total_volume", {}).get(config.VS_CURRENCY)
+            btc_dom = info.get("market_cap_percentage", {}).get("btc")
+            cap_change = info.get("market_cap_change_percentage_24h_usd")
+            active = info.get("active_cryptocurrencies")
+            markets = info.get("markets")
+            text = f"{INFO_EMOJI} "
+            if cap is not None:
+                text += f"Market Cap: ${cap:,.0f}\n"
+            if cap_change is not None:
+                text += f"24h Cap Change: {cap_change:.2f}%\n"
+            if volume is not None:
+                text += f"24h Volume: ${volume:,.0f}\n"
+            if btc_dom is not None:
+                text += f"BTC Dominance: {btc_dom:.2f}%\n"
+            if active is not None:
+                text += f"Active Coins: {active}\n"
+            if markets is not None:
+                text += f"Markets: {markets}"
+            await app.bot.send_message(chat_id, text)
+        if top:
+            lines = []
+            for item in top[:10]:
+                coin_id = item.get("id")
+                symbol = item.get("symbol") or api.symbol_for(coin_id)
+                price = item.get("price")
+                change_24h = item.get("change_24h")
+                line = symbol.upper()
+                if change_24h is not None:
+                    arrow = UP_ARROW if change_24h >= 0 else DOWN_ARROW
+                    line = f"{arrow} {line}"
+                if price is not None:
+                    line += f" ${format_price(price)}"
+                if change_24h is not None:
+                    line += f" ({change_24h:+.2f}% 24h)"
+                lines.append(line)
+            text = f"{INFO_EMOJI} Top coins:\n" + "\n".join(lines)
+            await app.bot.send_message(chat_id, text)
+        if trends:
+            data = sorted(
+                trends,
+                key=lambda x: (
+                    x.get("change_24h") is None,
+                    -(x.get("change_24h") or 0),
+                ),
+            )
+            lines = []
+            for item in data:
+                coin_id = item.get("id")
+                symbol = item.get("symbol") or api.symbol_for(coin_id)
+                price = item.get("price")
+                change_24h = item.get("change_24h")
+                line = symbol.upper()
+                if change_24h is not None:
+                    arrow = UP_ARROW if change_24h >= 0 else DOWN_ARROW
+                    line = f"{arrow} {line}"
+                if price is not None:
+                    line += f" ${format_price(price)}"
+                if change_24h is not None:
+                    line += f" ({change_24h:+.2f}% 24h)"
+                lines.append(line)
+            text = f"{INFO_EMOJI} Trending coins:\n" + "\n".join(lines)
+            await app.bot.send_message(chat_id, text)
+        if fear:
+            value_str = fear.get("value")
+            classification = fear.get("value_classification")
+            try:
+                value = int(value_str)
+            except (TypeError, ValueError):
+                value = None
+            if value is None:
+                emoji = INFO_EMOJI
+            elif value < 40:
+                emoji = "\U0001f534"
+            elif value < 60:
+                emoji = "\U0001f7e1"
+            else:
+                emoji = "\U0001f7e2"
+            text = f"{emoji} Fear & Greed Index: {value_str}"
+            if classification:
+                text += f" ({classification})"
+            await app.bot.send_message(chat_id, text)
+
+
 def get_keyboard() -> ReplyKeyboardMarkup:
     """Return the default reply keyboard shown to users."""
     coins_source = config.COINS or config.TOP_COINS[:20] or ["bitcoin"]
@@ -568,6 +664,12 @@ async def get_settings_keyboard(chat_id: int) -> InlineKeyboardMarkup:
         ],
         [
             InlineKeyboardButton(
+                f"overview: {settings['overview']}",
+                callback_data="settings:overview",
+            )
+        ],
+        [
+            InlineKeyboardButton(
                 f"currency: {settings['currency']}", callback_data="settings:currency"
             )
         ],
@@ -588,6 +690,7 @@ async def get_settings_menu(chat_id: int) -> ReplyKeyboardMarkup:
                 f"delete chart: {'on' if settings['delete_chart'] else 'off'}"
             )
         ],
+        [KeyboardButton(f"overview: {settings['overview']}")],
         [KeyboardButton(f"currency: {settings['currency']}")],
         [KeyboardButton(f"{BACK_EMOJI} Back")],
     ]
@@ -1156,7 +1259,7 @@ async def settings_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE) -> No
         usage = (
             f"{ERROR_EMOJI} Usage: "
             "/settings <threshold|interval|milestones|volume|deletechart|"
-            "currency> <value>"
+            "overview|currency> <value>"
         )
         await update.message.reply_text(usage)
         return
@@ -1222,6 +1325,18 @@ async def settings_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE) -> No
         state = "on" if config.DELETE_CHART_ON_RELOAD else "off"
         await update.message.reply_text(
             f"{SUCCESS_EMOJI} Delete chart on reload {state}"
+        )
+    elif key == "overview":
+        val = value.lower()
+        if val not in {"off", "morning", "midday", "evening"}:
+            await update.message.reply_text(
+                f"{ERROR_EMOJI} Overview must be off, morning, midday or evening"
+            )
+            return
+        config.DEFAULT_OVERVIEW = val
+        await db.set_user_settings(chat_id, overview=config.DEFAULT_OVERVIEW)
+        await update.message.reply_text(
+            f"{SUCCESS_EMOJI} Daily overview set to {config.DEFAULT_OVERVIEW}"
         )
     elif key == "currency":
         config.VS_CURRENCY = value.lower()
@@ -1416,6 +1531,14 @@ async def button(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
             config.DELETE_CHART_ON_RELOAD = not config.DELETE_CHART_ON_RELOAD
             state = "on" if config.DELETE_CHART_ON_RELOAD else "off"
             text = f"{SUCCESS_EMOJI} Delete chart on reload {state}"
+        elif key == "overview":
+            options = ["off", "morning", "midday", "evening"]
+            try:
+                idx = options.index(config.DEFAULT_OVERVIEW)
+            except ValueError:
+                idx = -1
+            config.DEFAULT_OVERVIEW = options[(idx + 1) % len(options)]
+            text = f"{SUCCESS_EMOJI} Daily overview set to {config.DEFAULT_OVERVIEW}"
         elif key == "currency":
             options = ["usd", "eur", "btc"]
             try:
@@ -1554,6 +1677,21 @@ async def menu(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
         menu = await get_settings_menu(update.effective_chat.id)
         await update.message.reply_text(
             f"{SUCCESS_EMOJI} Delete chart on reload {state}",
+            reply_markup=menu,
+        )
+    elif text.startswith("overview"):
+        options = ["off", "morning", "midday", "evening"]
+        try:
+            idx = options.index(config.DEFAULT_OVERVIEW)
+        except ValueError:
+            idx = -1
+        config.DEFAULT_OVERVIEW = options[(idx + 1) % len(options)]
+        await db.set_user_settings(
+            update.effective_chat.id, overview=config.DEFAULT_OVERVIEW
+        )
+        menu = await get_settings_menu(update.effective_chat.id)
+        await update.message.reply_text(
+            f"{SUCCESS_EMOJI} Daily overview set to {config.DEFAULT_OVERVIEW}",
             reply_markup=menu,
         )
     elif text.startswith("currency"):

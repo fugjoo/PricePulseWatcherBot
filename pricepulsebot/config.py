@@ -60,6 +60,7 @@ DELETE_CHART_ON_RELOAD = os.getenv("DELETE_CHART_ON_RELOAD", "true").lower() == 
 ENABLE_MILESTONE_ALERTS = os.getenv("ENABLE_MILESTONE_ALERTS", "true").lower() == "true"
 ENABLE_VOLUME_ALERTS = os.getenv("ENABLE_VOLUME_ALERTS", "true").lower() == "true"
 VS_CURRENCY = os.getenv("DEFAULT_VS_CURRENCY", "usd").lower()
+DEFAULT_OVERVIEW = os.getenv("DEFAULT_OVERVIEW", "off").lower()
 
 COINGECKO_API_KEY = os.getenv("COINGECKO_API_KEY")
 COINGECKO_BASE_URL = (
