@@ -267,6 +267,7 @@ async def send_rate_limited(
     text: str,
     emoji: str = DEFAULT_ALERT_EMOJI,
     suffix: str = "",
+    coin: Optional[str] = None,
 ) -> None:
     """Send a message while enforcing per-user and global rate limits."""
     now = time.time()
@@ -284,7 +285,8 @@ async def send_rate_limited(
     message = f"{emoji} {text}"
     if suffix:
         message += f" {suffix}"
-    await bot.send_message(chat_id=chat_id, text=message)
+    reply_markup = get_coin_keyboard(coin) if coin else None
+    await bot.send_message(chat_id=chat_id, text=message, reply_markup=reply_markup)
     user_q.append(time.time())
     global_messages.append(time.time())
 
@@ -414,6 +416,7 @@ async def check_prices(app) -> None:
                                 msg,
                                 emoji=UP_ARROW,
                                 suffix=random_trend_suffix(price - prev),
+                                coin=coin,
                             )
                         else:
                             msg = (
@@ -426,6 +429,7 @@ async def check_prices(app) -> None:
                                 msg,
                                 emoji=DOWN_ARROW,
                                 suffix=random_trend_suffix(price - prev),
+                                coin=coin,
                             )
                 MILESTONE_CACHE[(chat_id, coin)] = price
                 if target_price is not None and direction is not None:
@@ -444,6 +448,7 @@ async def check_prices(app) -> None:
                                 msg,
                                 emoji=UP_ARROW,
                                 suffix=random_trend_suffix(price - prev),
+                                coin=coin,
                             )
                         elif crossed_down:
                             msg = (
@@ -456,6 +461,7 @@ async def check_prices(app) -> None:
                                 msg,
                                 emoji=DOWN_ARROW,
                                 suffix=random_trend_suffix(price - prev),
+                                coin=coin,
                             )
                 if last_ts is None or time.time() - last_ts >= interval:
                     raw_change = (price - last_price) / last_price * 100
@@ -481,6 +487,7 @@ async def check_prices(app) -> None:
                             text,
                             emoji=trend_emojis(raw_change),
                             suffix=random_trend_suffix(raw_change),
+                            coin=coin,
                         )
                     if settings.get("volume", config.ENABLE_VOLUME_ALERTS):
                         if (
@@ -501,6 +508,7 @@ async def check_prices(app) -> None:
                                     msg,
                                     emoji=trend_emojis(raw_vol_change),
                                     suffix=random_trend_suffix(raw_vol_change),
+                                    coin=coin,
                                 )
                     await db.set_last_price(sub_id, price, volume)
 
@@ -573,6 +581,21 @@ async def get_settings_keyboard(chat_id: int) -> InlineKeyboardMarkup:
         ],
     ]
     return InlineKeyboardMarkup(buttons)
+
+
+def get_coin_keyboard(coin: Optional[str]) -> InlineKeyboardMarkup:
+    """Return an inline keyboard with info, chart and news buttons."""
+    if not coin:
+        return InlineKeyboardMarkup([])
+    return InlineKeyboardMarkup(
+        [
+            [
+                InlineKeyboardButton("chart 1h", callback_data=f"chart:{coin}:3600"),
+                InlineKeyboardButton("info", callback_data=f"info:{coin}"),
+                InlineKeyboardButton("news", callback_data=f"news:{coin}"),
+            ]
+        ]
+    )
 
 
 async def get_settings_menu(chat_id: int) -> ReplyKeyboardMarkup:
@@ -684,6 +707,7 @@ async def subscribe_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE) -> N
         f"{SUB_EMOJI} Subscribed to {api.symbol_for(coin)}",
         reply_markup=get_keyboard(),
     )
+    await _send_info(context, update.effective_chat.id, coin)
 
 
 async def unsubscribe_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
@@ -775,6 +799,13 @@ async def list_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
                     ),
                 ],
                 [InlineKeyboardButton(REMOVE_EMOJI, callback_data=f"del:{coin}")],
+                [
+                    InlineKeyboardButton(
+                        "chart 1h", callback_data=f"chart:{coin}:3600"
+                    ),
+                    InlineKeyboardButton("info", callback_data=f"info:{coin}"),
+                    InlineKeyboardButton("news", callback_data=f"news:{coin}"),
+                ],
             ]
         )
         await update.message.reply_text(text, reply_markup=keyboard)
@@ -827,7 +858,40 @@ async def info_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
         change,
         cap,
     )
-    await update.message.reply_text(text)
+    await update.message.reply_text(text, reply_markup=get_coin_keyboard(coin))
+
+
+async def _send_info(
+    context: ContextTypes.DEFAULT_TYPE, chat_id: int, coin: str
+) -> None:
+    """Send coin information to ``chat_id``."""
+    cached = await db.get_coin_data(coin)
+    data = cached.get("info") if cached else None
+    if data is not None and not isinstance(data, dict):
+        data = None
+    market = cached.get("market_info") if cached else None
+    if market is not None and not isinstance(market, dict):
+        market = None
+    if data is None:
+        data, err = await api.get_coin_info(coin, user=chat_id)
+        if err:
+            await context.bot.send_message(chat_id, f"{ERROR_EMOJI} {err}")
+            return
+    if data is None:
+        await context.bot.send_message(chat_id, f"{ERROR_EMOJI} No data available")
+        return
+    if market is None:
+        market = data.get("market_data")
+        if not isinstance(market, dict):
+            market = {}
+    price = usd_value(market.get("current_price"))
+    cap = usd_value(market.get("market_cap"))
+    change = market.get("price_change_percentage_24h")
+    sym = data.get("symbol", "").upper()
+    config.COIN_SYMBOLS[coin] = sym
+    config.SYMBOL_TO_COIN[sym.lower()] = coin
+    text = format_coin_text(data.get("name"), sym, price, change, cap)
+    await context.bot.send_message(chat_id, text, reply_markup=get_coin_keyboard(coin))
 
 
 async def _send_chart(
@@ -1107,6 +1171,35 @@ async def news_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
 import html  # noqa: E402
 
 
+async def _send_news(
+    context: ContextTypes.DEFAULT_TYPE, chat_id: int, coin: str
+) -> None:
+    """Send latest news articles for ``coin``."""
+    async with aiohttp.ClientSession() as session:
+        items = await api.get_news(coin, session=session, user=chat_id)
+    if not items:
+        await context.bot.send_message(
+            chat_id, f"{ERROR_EMOJI} No news for {api.symbol_for(coin)}"
+        )
+        return
+    for item in items[:5]:
+        url = item.get("url")
+        title = item.get("title")
+        if not title:
+            continue
+        title = html.escape(title)
+        if url:
+            text = f'{INFO_EMOJI} <a href="{url}">{title}</a>'
+        else:
+            text = f"{INFO_EMOJI} {title}"
+        await context.bot.send_message(
+            chat_id,
+            text,
+            parse_mode="HTML",
+            disable_web_page_preview=True,
+        )
+
+
 async def valuearea_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     """Calculate and display the volume value area for a symbol."""
     if len(context.args) < 3:
@@ -1380,6 +1473,12 @@ async def button(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
             seconds,
             force=force,
         )
+    elif query.data.startswith("info:"):
+        coin = query.data.split(":", 1)[1]
+        await _send_info(context, query.message.chat_id, coin)
+    elif query.data.startswith("news:"):
+        coin = query.data.split(":", 1)[1]
+        await _send_news(context, query.message.chat_id, coin)
     elif query.data.startswith("settings:"):
         key = query.data.split(":", 1)[1]
         text = ""
