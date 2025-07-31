@@ -55,7 +55,7 @@ class DummyCallbackUpdate:
 
 
 @pytest.mark.asyncio
-async def test_list_cmd_has_edit_button(tmp_path):
+async def test_list_cmd_shows_parameters(tmp_path):
     config.DB_FILE = str(tmp_path / "subs.db")
     await db.init_db()
     await db.subscribe_coin(1, "bitcoin", 1.0, 60)
@@ -79,11 +79,14 @@ async def test_list_cmd_has_edit_button(tmp_path):
     assert update.message.markups
     kb = update.message.markups[0]
     assert isinstance(kb, InlineKeyboardMarkup)
-    assert any(b.callback_data.startswith("edit:") for b in kb.inline_keyboard[0])
+    callbacks = [b.callback_data for b in kb.inline_keyboard[0]]
+    assert any(cb.startswith("thr:") for cb in callbacks)
+    assert any(cb.startswith("int:") for cb in callbacks)
+    assert any(cb.startswith("del:") for cb in callbacks)
 
 
 @pytest.mark.asyncio
-async def test_edit_threshold_button(tmp_path):
+async def test_threshold_button_updates(tmp_path):
     config.DB_FILE = str(tmp_path / "subs.db")
     await db.init_db()
     await db.subscribe_coin(1, "bitcoin", 1.0, 60)
@@ -100,16 +103,9 @@ async def test_edit_threshold_button(tmp_path):
             "chart_7d": [],
         },
     )
-    query = DummyCallbackQuery("edit:bitcoin")
+    query = DummyCallbackQuery("thr:bitcoin")
     update = DummyCallbackUpdate(query)
     ctx = DummyContext(DummyBot())
     await handlers.button(update, ctx)
-    assert query.reply_markup
-    kb = query.reply_markup
-    assert any(btn.callback_data.startswith("thr:") for btn in kb.inline_keyboard[0])
-
-    query2 = DummyCallbackQuery("thr:bitcoin")
-    update2 = DummyCallbackUpdate(query2)
-    await handlers.button(update2, ctx)
     subs = await db.list_subscriptions(1)
     assert subs[0][2] != 1.0

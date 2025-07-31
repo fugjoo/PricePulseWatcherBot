@@ -66,7 +66,7 @@ ERROR_EMOJI = "\u26a0\ufe0f"
 SETTINGS_EMOJI = "\u2699\ufe0f"
 BACK_EMOJI = "\u2b05\ufe0f"
 RELOAD_EMOJI = "\U0001f504"
-EDIT_EMOJI = "\u270f\ufe0f"
+REMOVE_EMOJI = "\u274c"
 
 # Commands organized by category for help output
 COMMAND_CATEGORIES: dict[str, list[tuple[str, str]]] = {
@@ -706,10 +706,10 @@ async def clear_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     )
 
 
-async def build_sub_entries(chat_id: int) -> List[Tuple[str, str]]:
+async def build_sub_entries(chat_id: int) -> List[Tuple[str, str, float, int]]:
     """Return formatted subscription entries for ``chat_id``."""
     subs = await db.list_subscriptions(chat_id)
-    entries: List[Tuple[str, str]] = []
+    entries: List[Tuple[str, str, float, int]] = []
     for _, coin, threshold, interval, *_ in subs:
         cached = await db.get_coin_data(coin)
         info = cached.get("info") if cached else None
@@ -747,7 +747,7 @@ async def build_sub_entries(chat_id: int) -> List[Tuple[str, str]]:
             threshold=threshold,
             interval=interval,
         )
-        entries.append((coin, line))
+        entries.append((coin, line, threshold, interval))
     return entries
 
 
@@ -760,12 +760,18 @@ async def list_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     if not entries:
         await update.message.reply_text(f"{INFO_EMOJI} No active subscriptions")
         return
-    for coin, text in entries:
+    for coin, text, threshold, interval in entries:
         keyboard = InlineKeyboardMarkup(
             [
                 [
-                    InlineKeyboardButton("Remove", callback_data=f"del:{coin}"),
-                    InlineKeyboardButton("Edit", callback_data=f"edit:{coin}"),
+                    InlineKeyboardButton(REMOVE_EMOJI, callback_data=f"del:{coin}"),
+                    InlineKeyboardButton(
+                        f"threshold: ±{threshold}%", callback_data=f"thr:{coin}"
+                    ),
+                    InlineKeyboardButton(
+                        f"interval: {config.format_interval(interval)}",
+                        callback_data=f"int:{coin}",
+                    ),
                 ]
             ]
         )
@@ -1281,36 +1287,6 @@ async def button(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
         await query.edit_message_text(
             f"{SUCCESS_EMOJI} Unsubscribed from {api.symbol_for(coin)}"
         )
-    elif query.data.startswith("edit:"):
-        coin = query.data.split(":", 1)[1]
-        subs = await db.list_subscriptions(query.message.chat_id)
-        for _, c, th, interval, *_ in subs:
-            if c == coin:
-                threshold = th
-                iv = interval
-                break
-        else:
-            await query.answer()
-            return
-        keyboard = InlineKeyboardMarkup(
-            [
-                [
-                    InlineKeyboardButton(
-                        f"threshold: ±{threshold}%", callback_data=f"thr:{coin}"
-                    )
-                ],
-                [
-                    InlineKeyboardButton(
-                        f"interval: {config.format_interval(iv)}",
-                        callback_data=f"int:{coin}",
-                    )
-                ],
-                [InlineKeyboardButton(f"{BACK_EMOJI} Back", callback_data="list")],
-            ]
-        )
-        entries = await build_sub_entries(query.message.chat_id)
-        text = next((t for c, t in entries if c == coin), coin)
-        await query.edit_message_text(text, reply_markup=keyboard)
     elif query.data.startswith("thr:"):
         coin = query.data.split(":", 1)[1]
         subs = await db.list_subscriptions(query.message.chat_id)
@@ -1333,21 +1309,19 @@ async def button(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
         keyboard = InlineKeyboardMarkup(
             [
                 [
+                    InlineKeyboardButton(REMOVE_EMOJI, callback_data=f"del:{coin}"),
                     InlineKeyboardButton(
                         f"threshold: ±{new_th}%", callback_data=f"thr:{coin}"
-                    )
-                ],
-                [
+                    ),
                     InlineKeyboardButton(
                         f"interval: {config.format_interval(iv)}",
                         callback_data=f"int:{coin}",
-                    )
-                ],
-                [InlineKeyboardButton(f"{BACK_EMOJI} Back", callback_data="list")],
+                    ),
+                ]
             ]
         )
         entries = await build_sub_entries(query.message.chat_id)
-        text = next((t for c, t in entries if c == coin), coin)
+        text = next((t for c, t, _, _ in entries if c == coin), coin)
         await query.edit_message_text(text, reply_markup=keyboard)
     elif query.data.startswith("int:"):
         coin = query.data.split(":", 1)[1]
@@ -1371,21 +1345,19 @@ async def button(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
         keyboard = InlineKeyboardMarkup(
             [
                 [
+                    InlineKeyboardButton(REMOVE_EMOJI, callback_data=f"del:{coin}"),
                     InlineKeyboardButton(
                         f"threshold: ±{threshold}%", callback_data=f"thr:{coin}"
-                    )
-                ],
-                [
+                    ),
                     InlineKeyboardButton(
                         f"interval: {config.format_interval(new_int)}",
                         callback_data=f"int:{coin}",
-                    )
-                ],
-                [InlineKeyboardButton(f"{BACK_EMOJI} Back", callback_data="list")],
+                    ),
+                ]
             ]
         )
         entries = await build_sub_entries(query.message.chat_id)
-        text = next((t for c, t in entries if c == coin), coin)
+        text = next((t for c, t, _, _ in entries if c == coin), coin)
         await query.edit_message_text(text, reply_markup=keyboard)
     elif query.data.startswith("chart:"):
         parts = query.data.split(":")
@@ -1458,9 +1430,22 @@ async def button(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
                 text=f"{INFO_EMOJI} No active subscriptions",
             )
         else:
-            for coin, text in entries:
+            for coin, text, threshold, interval in entries:
                 keyboard = InlineKeyboardMarkup(
-                    [[InlineKeyboardButton("Remove", callback_data=f"del:{coin}")]]
+                    [
+                        [
+                            InlineKeyboardButton(
+                                REMOVE_EMOJI, callback_data=f"del:{coin}"
+                            ),
+                            InlineKeyboardButton(
+                                f"threshold: ±{threshold}%", callback_data=f"thr:{coin}"
+                            ),
+                            InlineKeyboardButton(
+                                f"interval: {config.format_interval(interval)}",
+                                callback_data=f"int:{coin}",
+                            ),
+                        ]
+                    ]
                 )
                 await context.bot.send_message(
                     chat_id=query.message.chat_id, text=text, reply_markup=keyboard
