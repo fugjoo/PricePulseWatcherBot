@@ -121,7 +121,8 @@ async def init_db() -> None:
                 milestones INTEGER,
                 volume INTEGER,
                 currency TEXT,
-                delete_chart INTEGER
+                delete_chart INTEGER,
+                overview TEXT
             )
             """
         )
@@ -133,6 +134,8 @@ async def init_db() -> None:
             await db.execute(
                 "ALTER TABLE user_settings ADD COLUMN delete_chart INTEGER"
             )
+        if "overview" not in columns:
+            await db.execute("ALTER TABLE user_settings ADD COLUMN overview TEXT")
         cursor = await db.execute("PRAGMA table_info(subscriptions)")
         rows = await cursor.fetchall()
         await cursor.close()
@@ -434,7 +437,7 @@ async def get_user_settings(chat_id: int) -> dict:
         cursor = await db.execute(
             (
                 "SELECT threshold, interval, milestones, volume, "
-                "currency, delete_chart FROM user_settings WHERE chat_id=?"
+                "currency, delete_chart, overview FROM user_settings WHERE chat_id=?"
             ),
             (chat_id,),
         )
@@ -447,6 +450,7 @@ async def get_user_settings(chat_id: int) -> dict:
         "volume": config.ENABLE_VOLUME_ALERTS,
         "currency": config.VS_CURRENCY,
         "delete_chart": config.DELETE_CHART_ON_RELOAD,
+        "overview": config.DEFAULT_OVERVIEW,
     }
     if row:
         keys = [
@@ -456,6 +460,7 @@ async def get_user_settings(chat_id: int) -> dict:
             "volume",
             "currency",
             "delete_chart",
+            "overview",
         ]
         for key, value in zip(keys, row):
             if value is not None:
@@ -504,3 +509,15 @@ async def get_db_stats() -> Tuple[int, int, int, int]:
         await cursor.close()
     size = os.path.getsize(config.DB_FILE) if os.path.exists(config.DB_FILE) else 0
     return (sub_count, size, user_count, coin_count)
+
+
+async def get_overview_chats(period: str) -> list[int]:
+    """Return chat IDs that opted in to daily overview for ``period``."""
+    async with aiosqlite.connect(config.DB_FILE) as db:
+        cursor = await db.execute(
+            "SELECT chat_id FROM user_settings WHERE overview=?",
+            (period,),
+        )
+        rows = await cursor.fetchall()
+        await cursor.close()
+    return [row[0] for row in rows]
