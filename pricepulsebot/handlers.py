@@ -65,6 +65,7 @@ SUCCESS_EMOJI = "\u2705"
 ERROR_EMOJI = "\u26a0\ufe0f"
 SETTINGS_EMOJI = "\u2699\ufe0f"
 BACK_EMOJI = "\u2b05\ufe0f"
+RELOAD_EMOJI = "\U0001f504"
 
 # Commands organized by category for help output
 COMMAND_CATEGORIES: dict[str, list[tuple[str, str]]] = {
@@ -851,7 +852,7 @@ async def _send_chart(
         [
             [
                 InlineKeyboardButton(
-                    "Reload",
+                    RELOAD_EMOJI,
                     callback_data=f"chart:{coin}:{seconds}:reload",
                 ),
                 InlineKeyboardButton("1h", callback_data=f"chart:{coin}:3600"),
