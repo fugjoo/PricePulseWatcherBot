@@ -284,16 +284,16 @@ async def send_rate_limited(
 async def check_prices(app) -> None:
     """Check all subscriptions and send price alerts when needed."""
     async with aiohttp.ClientSession() as http_session:
-        async with db.aiosqlite.connect(config.DB_FILE) as database:
-            cursor = await database.execute(
-                (
-                    "SELECT id, chat_id, coin_id, threshold, interval, target_price, "
-                    "direction, last_price, last_volume, last_alert_ts "
-                    "FROM subscriptions"
-                )
+        database = await db.get_connection()
+        cursor = await database.execute(
+            (
+                "SELECT id, chat_id, coin_id, threshold, interval, target_price, "
+                "direction, last_price, last_volume, last_alert_ts "
+                "FROM subscriptions"
             )
-            rows = await cursor.fetchall()
-            await cursor.close()
+        )
+        rows = await cursor.fetchall()
+        await cursor.close()
         by_coin: Dict[
             str,
             List[
@@ -499,10 +499,10 @@ async def check_prices(app) -> None:
 
 async def refresh_cache(app) -> None:
     """Refresh cached data for coins referenced in the database."""
-    async with db.aiosqlite.connect(config.DB_FILE) as database:
-        cursor = await database.execute("SELECT DISTINCT coin_id FROM subscriptions")
-        coins = [row[0] for row in await cursor.fetchall()]
-        await cursor.close()
+    database = await db.get_connection()
+    cursor = await database.execute("SELECT DISTINCT coin_id FROM subscriptions")
+    coins = [row[0] for row in await cursor.fetchall()]
+    await cursor.close()
     async with aiohttp.ClientSession() as session:
         await api.refresh_coins_data(coins, session=session)
     await api.get_global_overview(user=None)
