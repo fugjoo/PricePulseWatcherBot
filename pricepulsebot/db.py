@@ -9,6 +9,29 @@ import aiosqlite
 
 from . import config
 
+_connection: Optional[aiosqlite.Connection] = None
+_current_db_file: Optional[str] = None
+
+
+async def get_connection() -> aiosqlite.Connection:
+    """Return a global aiosqlite connection, creating it if needed."""
+    global _connection, _current_db_file
+    if _connection is None or _current_db_file != config.DB_FILE:
+        if _connection is not None:
+            await _connection.close()
+        _connection = await aiosqlite.connect(config.DB_FILE)
+        _current_db_file = config.DB_FILE
+    return _connection
+
+
+async def close_connection() -> None:
+    """Close the global aiosqlite connection if it exists."""
+    global _connection, _current_db_file
+    if _connection is not None:
+        await _connection.close()
+        _connection = None
+        _current_db_file = None
+
 
 async def init_db() -> None:
     """Create database tables if they do not already exist."""

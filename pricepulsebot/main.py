@@ -20,6 +20,7 @@ from . import api, config, db, handlers
 async def main() -> None:
     """Run the Telegram bot until the process receives a stop signal."""
     await db.init_db()
+    await db.get_connection()
     await api.fetch_trending_coins()
     await api.fetch_top_coins()
 
@@ -83,4 +84,5 @@ async def main() -> None:
     await app.stop()
     await app.shutdown()
     scheduler.shutdown()
+    await db.close_connection()
     config.logger.info(f"{config.BOT_NAME} stopped")
