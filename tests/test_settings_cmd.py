@@ -94,6 +94,16 @@ async def test_settings_update_volume():
 
 
 @pytest.mark.asyncio
+async def test_settings_update_deletechart():
+    update = DummyUpdate()
+    ctx = DummyContext(["deletechart", "off"])
+    prev = config.DELETE_CHART_ON_RELOAD
+    await handlers.settings_cmd(update, ctx)
+    assert config.DELETE_CHART_ON_RELOAD is False
+    config.DELETE_CHART_ON_RELOAD = prev
+
+
+@pytest.mark.asyncio
 async def test_settings_pricecheck_readonly():
     update = DummyUpdate()
     ctx = DummyContext(["pricecheck", "30s"])
@@ -149,3 +159,17 @@ async def test_settings_button_toggle_volume():
     assert isinstance(query.reply_markup, InlineKeyboardMarkup)
     assert bot.sent
     config.ENABLE_VOLUME_ALERTS = prev
+
+
+@pytest.mark.asyncio
+async def test_settings_button_toggle_deletechart():
+    bot = DummyBot()
+    query = DummyCallbackQuery("settings:deletechart")
+    update = DummyCallbackUpdate(query)
+    ctx = DummyContext([], bot)
+    prev = config.DELETE_CHART_ON_RELOAD
+    await handlers.button(update, ctx)
+    assert config.DELETE_CHART_ON_RELOAD != prev
+    assert isinstance(query.reply_markup, InlineKeyboardMarkup)
+    assert bot.sent
+    config.DELETE_CHART_ON_RELOAD = prev

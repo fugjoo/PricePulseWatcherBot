@@ -75,3 +75,24 @@ async def test_settings_menu_volume_toggle():
     assert config.ENABLE_VOLUME_ALERTS != prev
     assert isinstance(update.message.markups[-1], ReplyKeyboardMarkup)
     config.ENABLE_VOLUME_ALERTS = prev
+
+
+@pytest.mark.asyncio
+async def test_settings_menu_deletechart_toggle():
+    prev = config.DELETE_CHART_ON_RELOAD
+    update = DummyUpdate(SETTINGS_EMOJI)
+    ctx = DummyContext()
+    await handlers.menu(update, ctx)
+    assert any(
+        "delete chart" in btn.text
+        for row in update.message.markups[-1].keyboard
+        for btn in row
+    )
+
+    update.message.text = (
+        f"delete chart: {'on' if not config.DELETE_CHART_ON_RELOAD else 'off'}"
+    )
+    await handlers.menu(update, ctx)
+    assert config.DELETE_CHART_ON_RELOAD != prev
+    assert isinstance(update.message.markups[-1], ReplyKeyboardMarkup)
+    config.DELETE_CHART_ON_RELOAD = prev
