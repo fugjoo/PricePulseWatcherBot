@@ -53,6 +53,8 @@ async def test_status_cmd_basic():
     assert update.message.texts
     text = update.message.texts[0]
     assert "API:" in text and "DB:" in text
+    assert "users" in text and "coins" in text
+    assert "%" in text
     counts = api.status_counts()
     assert 200 not in counts
     assert counts[429] == 1

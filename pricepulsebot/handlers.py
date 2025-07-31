@@ -1193,23 +1193,17 @@ async def settings_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE) -> No
 
 
 async def status_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
-    """Show bot, API and database info plus a status timeline."""
+    """Show bot, API and database info plus API response distribution."""
     counts = api.status_counts()
-    history = [(ts, status) for ts, status in api.STATUS_HISTORY]
-    if not history:
+    if not counts:
         await update.message.reply_text(f"{INFO_EMOJI} No API requests recorded")
         return
 
-    times = [datetime.fromtimestamp(ts) for ts, _ in history]
-    statuses = [s for _, s in history]
-    plt.figure(figsize=(6, 3))
-    plt.plot(times, statuses, drawstyle="steps-post")
-    ax = plt.gca()
-    ax.xaxis.set_major_locator(mdates.AutoDateLocator())
-    ax.xaxis.set_major_formatter(mdates.DateFormatter("%H:%M"))
-    plt.xlabel("Time")
-    plt.ylabel("HTTP status")
-    plt.title("API status last 3h")
+    labels = [str(code) for code in sorted(counts)]
+    sizes = [counts[int(code)] for code in labels]
+    plt.figure(figsize=(4, 4))
+    plt.pie(sizes, labels=labels, autopct="%1.1f%%")
+    plt.title("API responses last 3h")
     plt.tight_layout()
     buf = BytesIO()
     plt.savefig(buf, format="png")
@@ -1217,12 +1211,15 @@ async def status_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None
     buf.seek(0)
     await context.bot.send_photo(update.effective_chat.id, buf)
 
-    db_count, db_size = await db.get_db_stats()
-    lines = [f"{code}: {counts[code]}" for code in sorted(counts)]
+    sub_count, db_size, user_count, coin_count = await db.get_db_stats()
+    total = sum(sizes)
+    lines = [f"{labels[i]}: {sizes[i] / total * 100:.1f}%" for i in range(len(labels))]
     text = (
         f"{INFO_EMOJI} Bot: {config.BOT_NAME}\n"
         f"API: {config.COINGECKO_BASE_URL}\n"
-        f"DB: {config.DB_FILE} ({db_count} subs, {db_size // 1024} kB)\n"
+        f"DB: {config.DB_FILE} ("
+        f"{sub_count} subs, {user_count} users, "
+        f"{coin_count} coins, {db_size // 1024} kB)\n"
         "API responses:\n" + "\n".join(lines)
     )
     await update.message.reply_text(text)
