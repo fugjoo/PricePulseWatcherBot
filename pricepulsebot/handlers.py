@@ -66,6 +66,7 @@ ERROR_EMOJI = "\u26a0\ufe0f"
 SETTINGS_EMOJI = "\u2699\ufe0f"
 BACK_EMOJI = "\u2b05\ufe0f"
 RELOAD_EMOJI = "\U0001f504"
+EDIT_EMOJI = "\u270f\ufe0f"
 
 # Commands organized by category for help output
 COMMAND_CATEGORIES: dict[str, list[tuple[str, str]]] = {
@@ -761,7 +762,12 @@ async def list_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
         return
     for coin, text in entries:
         keyboard = InlineKeyboardMarkup(
-            [[InlineKeyboardButton("Remove", callback_data=f"del:{coin}")]]
+            [
+                [
+                    InlineKeyboardButton("Remove", callback_data=f"del:{coin}"),
+                    InlineKeyboardButton("Edit", callback_data=f"edit:{coin}"),
+                ]
+            ]
         )
         await update.message.reply_text(text, reply_markup=keyboard)
 
@@ -1277,11 +1283,110 @@ async def button(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
         )
     elif query.data.startswith("edit:"):
         coin = query.data.split(":", 1)[1]
-        await context.bot.send_message(
-            chat_id=query.message.chat_id,
-            text=f"{INFO_EMOJI} Use /add {coin} [pct] [interval] to update",
+        subs = await db.list_subscriptions(query.message.chat_id)
+        for _, c, th, interval, *_ in subs:
+            if c == coin:
+                threshold = th
+                iv = interval
+                break
+        else:
+            await query.answer()
+            return
+        keyboard = InlineKeyboardMarkup(
+            [
+                [
+                    InlineKeyboardButton(
+                        f"threshold: ±{threshold}%", callback_data=f"thr:{coin}"
+                    )
+                ],
+                [
+                    InlineKeyboardButton(
+                        f"interval: {config.format_interval(iv)}",
+                        callback_data=f"int:{coin}",
+                    )
+                ],
+                [InlineKeyboardButton(f"{BACK_EMOJI} Back", callback_data="list")],
+            ]
         )
-        await query.edit_message_reply_markup(reply_markup=None)
+        entries = await build_sub_entries(query.message.chat_id)
+        text = next((t for c, t in entries if c == coin), coin)
+        await query.edit_message_text(text, reply_markup=keyboard)
+    elif query.data.startswith("thr:"):
+        coin = query.data.split(":", 1)[1]
+        subs = await db.list_subscriptions(query.message.chat_id)
+        for _, c, th, interval, *_ in subs:
+            if c == coin:
+                current_th = th
+                iv = interval
+                break
+        else:
+            await query.answer()
+            return
+        options = [0.1, 0.5, 1.0, 2.0, 5.0]
+        try:
+            idx = options.index(current_th)
+        except ValueError:
+            idx = -1
+        new_th = options[(idx + 1) % len(options)]
+        await db.unsubscribe_coin(query.message.chat_id, coin)
+        await db.subscribe_coin(query.message.chat_id, coin, new_th, iv)
+        keyboard = InlineKeyboardMarkup(
+            [
+                [
+                    InlineKeyboardButton(
+                        f"threshold: ±{new_th}%", callback_data=f"thr:{coin}"
+                    )
+                ],
+                [
+                    InlineKeyboardButton(
+                        f"interval: {config.format_interval(iv)}",
+                        callback_data=f"int:{coin}",
+                    )
+                ],
+                [InlineKeyboardButton(f"{BACK_EMOJI} Back", callback_data="list")],
+            ]
+        )
+        entries = await build_sub_entries(query.message.chat_id)
+        text = next((t for c, t in entries if c == coin), coin)
+        await query.edit_message_text(text, reply_markup=keyboard)
+    elif query.data.startswith("int:"):
+        coin = query.data.split(":", 1)[1]
+        subs = await db.list_subscriptions(query.message.chat_id)
+        for _, c, th, interval, *_ in subs:
+            if c == coin:
+                threshold = th
+                current_int = interval
+                break
+        else:
+            await query.answer()
+            return
+        options = [60, 300, 600, 1800, 3600]
+        try:
+            idx = options.index(current_int)
+        except ValueError:
+            idx = -1
+        new_int = options[(idx + 1) % len(options)]
+        await db.unsubscribe_coin(query.message.chat_id, coin)
+        await db.subscribe_coin(query.message.chat_id, coin, threshold, new_int)
+        keyboard = InlineKeyboardMarkup(
+            [
+                [
+                    InlineKeyboardButton(
+                        f"threshold: ±{threshold}%", callback_data=f"thr:{coin}"
+                    )
+                ],
+                [
+                    InlineKeyboardButton(
+                        f"interval: {config.format_interval(new_int)}",
+                        callback_data=f"int:{coin}",
+                    )
+                ],
+                [InlineKeyboardButton(f"{BACK_EMOJI} Back", callback_data="list")],
+            ]
+        )
+        entries = await build_sub_entries(query.message.chat_id)
+        text = next((t for c, t in entries if c == coin), coin)
+        await query.edit_message_text(text, reply_markup=keyboard)
     elif query.data.startswith("chart:"):
         parts = query.data.split(":")
         coin = parts[1]
