@@ -79,7 +79,7 @@ async def test_list_cmd_shows_parameters(tmp_path):
     assert update.message.markups
     kb = update.message.markups[0]
     assert isinstance(kb, InlineKeyboardMarkup)
-    callbacks = [b.callback_data for b in kb.inline_keyboard[0]]
+    callbacks = [b.callback_data for row in kb.inline_keyboard for b in row]
     assert any(cb.startswith("thr:") for cb in callbacks)
     assert any(cb.startswith("int:") for cb in callbacks)
     assert any(cb.startswith("del:") for cb in callbacks)
