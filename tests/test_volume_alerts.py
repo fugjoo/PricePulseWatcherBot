@@ -14,8 +14,8 @@ class DummyBot:
     def __init__(self):
         self.sent = []
 
-    async def send_message(self, chat_id, text):
-        self.sent.append((chat_id, text))
+    async def send_message(self, chat_id, text, **kwargs):
+        self.sent.append((chat_id, text, kwargs.get("reply_markup")))
 
 
 class DummyApp:
@@ -52,7 +52,7 @@ async def test_volume_spike_alert(tmp_path, monkeypatch):
     MILESTONE_CACHE.clear()
     await handlers.check_prices(app)
     MILESTONE_CACHE.clear()
-    assert any("volume" in msg for _, msg in bot.sent)
+    assert any("volume" in msg for _, msg, _ in bot.sent)
 
 
 @pytest.mark.asyncio
@@ -84,7 +84,7 @@ async def test_volume_drop_alert(tmp_path, monkeypatch):
     MILESTONE_CACHE.clear()
     await handlers.check_prices(app)
     MILESTONE_CACHE.clear()
-    assert any("volume" in msg for _, msg in bot.sent)
+    assert any("volume" in msg for _, msg, _ in bot.sent)
 
 
 @pytest.mark.asyncio
@@ -119,4 +119,4 @@ async def test_volume_alerts_disabled(tmp_path, monkeypatch):
     await handlers.check_prices(app)
     MILESTONE_CACHE.clear()
     config.ENABLE_VOLUME_ALERTS = prev
-    assert not any("volume" in msg for _, msg in bot.sent)
+    assert not any("volume" in msg for _, msg, _ in bot.sent)

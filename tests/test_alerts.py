@@ -8,8 +8,8 @@ class DummyBot:
     def __init__(self):
         self.sent = []
 
-    async def send_message(self, chat_id, text):
-        self.sent.append((chat_id, text))
+    async def send_message(self, chat_id, text, **kwargs):
+        self.sent.append((chat_id, text, kwargs.get("reply_markup")))
 
 
 @pytest.mark.asyncio
