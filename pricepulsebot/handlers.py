@@ -559,6 +559,12 @@ async def get_settings_keyboard(chat_id: int) -> InlineKeyboardMarkup:
         ],
         [
             InlineKeyboardButton(
+                f"delete chart: {'on' if settings['delete_chart'] else 'off'}",
+                callback_data="settings:deletechart",
+            )
+        ],
+        [
+            InlineKeyboardButton(
                 f"currency: {settings['currency']}", callback_data="settings:currency"
             )
         ],
@@ -574,6 +580,11 @@ async def get_settings_menu(chat_id: int) -> ReplyKeyboardMarkup:
         [KeyboardButton(f"interval: {config.format_interval(settings['interval'])}")],
         [KeyboardButton(f"milestones: {'on' if settings['milestones'] else 'off'}")],
         [KeyboardButton(f"volume: {'on' if settings['volume'] else 'off'}")],
+        [
+            KeyboardButton(
+                f"delete chart: {'on' if settings['delete_chart'] else 'off'}"
+            )
+        ],
         [KeyboardButton(f"currency: {settings['currency']}")],
         [KeyboardButton(f"{BACK_EMOJI} Back")],
     ]
@@ -1126,7 +1137,8 @@ async def settings_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE) -> No
     if len(context.args) < 2:
         usage = (
             f"{ERROR_EMOJI} Usage: "
-            "/settings <threshold|interval|milestones|volume|currency> <value>"
+            "/settings <threshold|interval|milestones|volume|deletechart|"
+            "currency> <value>"
         )
         await update.message.reply_text(usage)
         return
@@ -1178,6 +1190,21 @@ async def settings_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE) -> No
         await db.set_user_settings(chat_id, volume=int(config.ENABLE_VOLUME_ALERTS))
         state = "enabled" if config.ENABLE_VOLUME_ALERTS else "disabled"
         await update.message.reply_text(f"{SUCCESS_EMOJI} Volume alerts {state}")
+    elif key == "deletechart":
+        val = value.lower()
+        if val not in {"on", "off"}:
+            await update.message.reply_text(
+                f"{ERROR_EMOJI} Delete chart must be on or off"
+            )
+            return
+        config.DELETE_CHART_ON_RELOAD = val == "on"
+        await db.set_user_settings(
+            chat_id, delete_chart=int(config.DELETE_CHART_ON_RELOAD)
+        )
+        state = "on" if config.DELETE_CHART_ON_RELOAD else "off"
+        await update.message.reply_text(
+            f"{SUCCESS_EMOJI} Delete chart on reload {state}"
+        )
     elif key == "currency":
         config.VS_CURRENCY = value.lower()
         await db.set_user_settings(chat_id, currency=config.VS_CURRENCY)
@@ -1260,7 +1287,9 @@ async def button(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
         coin = parts[1]
         seconds = int(parts[2])
         force = len(parts) > 3 and parts[3] == "reload"
-        await query.message.delete()
+        settings = await db.get_user_settings(query.message.chat_id)
+        if settings.get("delete_chart", config.DELETE_CHART_ON_RELOAD):
+            await query.message.delete()
         await _send_chart(
             context,
             query.message.chat_id,
@@ -1300,6 +1329,10 @@ async def button(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
             config.ENABLE_VOLUME_ALERTS = not config.ENABLE_VOLUME_ALERTS
             state = "enabled" if config.ENABLE_VOLUME_ALERTS else "disabled"
             text = f"{SUCCESS_EMOJI} Volume alerts {state}"
+        elif key == "deletechart":
+            config.DELETE_CHART_ON_RELOAD = not config.DELETE_CHART_ON_RELOAD
+            state = "on" if config.DELETE_CHART_ON_RELOAD else "off"
+            text = f"{SUCCESS_EMOJI} Delete chart on reload {state}"
         elif key == "currency":
             options = ["usd", "eur", "btc"]
             try:
@@ -1410,6 +1443,17 @@ async def menu(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
         menu = await get_settings_menu(update.effective_chat.id)
         await update.message.reply_text(
             f"{SUCCESS_EMOJI} Volume alerts {state}",
+            reply_markup=menu,
+        )
+    elif text.startswith("delete chart"):
+        config.DELETE_CHART_ON_RELOAD = not config.DELETE_CHART_ON_RELOAD
+        await db.set_user_settings(
+            update.effective_chat.id, delete_chart=int(config.DELETE_CHART_ON_RELOAD)
+        )
+        state = "on" if config.DELETE_CHART_ON_RELOAD else "off"
+        menu = await get_settings_menu(update.effective_chat.id)
+        await update.message.reply_text(
+            f"{SUCCESS_EMOJI} Delete chart on reload {state}",
             reply_markup=menu,
         )
     elif text.startswith("currency"):

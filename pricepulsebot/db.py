@@ -29,6 +29,7 @@ async def init_db() -> None:
             )
             """
         )
+        cursor = await db.execute("PRAGMA table_info(subscriptions)")
         await db.execute(
             """
             CREATE TABLE IF NOT EXISTS global_info (
@@ -96,10 +97,19 @@ async def init_db() -> None:
                 interval INTEGER,
                 milestones INTEGER,
                 volume INTEGER,
-                currency TEXT
+                currency TEXT,
+                delete_chart INTEGER
             )
             """
         )
+        cursor = await db.execute("PRAGMA table_info(user_settings)")
+        rows = await cursor.fetchall()
+        await cursor.close()
+        columns = {row[1] for row in rows}
+        if "delete_chart" not in columns:
+            await db.execute(
+                "ALTER TABLE user_settings ADD COLUMN delete_chart INTEGER"
+            )
         cursor = await db.execute("PRAGMA table_info(subscriptions)")
         rows = await cursor.fetchall()
         await cursor.close()
@@ -401,7 +411,7 @@ async def get_user_settings(chat_id: int) -> dict:
         cursor = await db.execute(
             (
                 "SELECT threshold, interval, milestones, volume, "
-                "currency FROM user_settings WHERE chat_id=?"
+                "currency, delete_chart FROM user_settings WHERE chat_id=?"
             ),
             (chat_id,),
         )
@@ -413,6 +423,7 @@ async def get_user_settings(chat_id: int) -> dict:
         "milestones": config.ENABLE_MILESTONE_ALERTS,
         "volume": config.ENABLE_VOLUME_ALERTS,
         "currency": config.VS_CURRENCY,
+        "delete_chart": config.DELETE_CHART_ON_RELOAD,
     }
     if row:
         keys = [
@@ -421,10 +432,11 @@ async def get_user_settings(chat_id: int) -> dict:
             "milestones",
             "volume",
             "currency",
+            "delete_chart",
         ]
         for key, value in zip(keys, row):
             if value is not None:
-                if key in {"milestones", "volume"}:
+                if key in {"milestones", "volume", "delete_chart"}:
                     settings[key] = bool(value)
                 else:
                     settings[key] = value
