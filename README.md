@@ -9,7 +9,7 @@ percentage. Create a `.env` from the example and keep your
 - Subscribe to trending coins and get alerts
 - Suggest random coins from the top market cap list in the keyboard
 - Autocompletion for all bot commands
-- Monitor API health with `/status`
+- Monitor API and database health with `/status`
 - Check recent coin news via `/news` (CryptoCompare)
 
 ## Quickstart
@@ -72,7 +72,7 @@ Create a `.env` file from the example. It holds credentials and runtime options:
 - `/top` – show top market cap coins
 - `/global` – show global market stats
 - `/feargreed` – show daily market sentiment
-- `/status` – display API status overview
+- `/status` – display API and database status overview
 - `/settings [key value]` – show or change default settings (threshold,
   interval, milestones, volume, currency)
 

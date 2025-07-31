@@ -458,11 +458,14 @@ async def set_user_settings(chat_id: int, **kwargs) -> None:
         await db.commit()
 
 
-async def get_db_stats() -> Tuple[int, int]:
-    """Return subscription count and file size in bytes."""
+async def get_db_stats() -> Tuple[int, int, int, int]:
+    """Return subscription count, database size, user count and coin count."""
     async with aiosqlite.connect(config.DB_FILE) as db:
-        cursor = await db.execute("SELECT COUNT(*) FROM subscriptions")
-        count_row = await cursor.fetchone()
+        cursor = await db.execute(
+            "SELECT COUNT(*), COUNT(DISTINCT chat_id), COUNT(DISTINCT coin_id) "
+            "FROM subscriptions"
+        )
+        sub_count, user_count, coin_count = await cursor.fetchone()
         await cursor.close()
     size = os.path.getsize(config.DB_FILE) if os.path.exists(config.DB_FILE) else 0
-    return (count_row[0], size)
+    return (sub_count, size, user_count, coin_count)
